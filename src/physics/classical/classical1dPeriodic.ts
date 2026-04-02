@@ -22,6 +22,7 @@ export interface Classical1DPeriodicConfig {
 export type Classical1DPeriodicQuantity = 'displacement' | 'velocity' | 'energy-density';
 
 export interface Classical1DPeriodicSnapshot {
+  readonly kind: 'classical-1d-periodic';
   readonly time: number;
   readonly systemLabel: '1D circle';
   readonly boundaryCondition: 'periodic';
@@ -120,6 +121,7 @@ export class Classical1DPeriodicEngine
     const energy = this.computeEnergy();
 
     return {
+      kind: 'classical-1d-periodic',
       time: this.time,
       systemLabel: '1D circle',
       boundaryCondition: 'periodic',

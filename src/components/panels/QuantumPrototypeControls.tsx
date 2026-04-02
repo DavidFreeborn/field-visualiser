@@ -1,46 +1,43 @@
-import type {
-  Classical1DPeriodicConfig,
-  Classical1DPeriodicQuantity,
-} from '../../physics/classical/classical1dPeriodic';
-import type { PeriodicClassicalInitialPreset } from '../../physics/classical/initialConditions';
 import { ModeSwitch, type AppMode } from './ModeSwitch';
+import type {
+  Quantum1DPeriodicConfig,
+  Quantum1DPeriodicQuantity,
+} from '../../physics/quantum/quantum1dPeriodic';
+import type { PeriodicQuantumInitialPreset } from '../../physics/quantum/initialStates';
 
-interface PrototypeControlsProps {
+interface QuantumPrototypeControlsProps {
   readonly mode: AppMode;
-  readonly config: Classical1DPeriodicConfig;
-  readonly quantity: Classical1DPeriodicQuantity;
+  readonly config: Quantum1DPeriodicConfig;
+  readonly quantity: Quantum1DPeriodicQuantity;
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
-  readonly showSprings: boolean;
   readonly onModeChange: (mode: AppMode) => void;
-  readonly onConfigChange: (nextConfig: Classical1DPeriodicConfig) => void;
-  readonly onQuantityChange: (quantity: Classical1DPeriodicQuantity) => void;
+  readonly onConfigChange: (nextConfig: Quantum1DPeriodicConfig) => void;
+  readonly onQuantityChange: (quantity: Quantum1DPeriodicQuantity) => void;
   readonly onPlayingChange: (playing: boolean) => void;
   readonly onReset: () => void;
   readonly onStep: () => void;
   readonly onSpeedChange: (speed: number) => void;
   readonly onShowLatticeChange: (showLattice: boolean) => void;
-  readonly onShowSpringsChange: (showSprings: boolean) => void;
 }
 
 const resolutionOptions = [32, 64, 128, 256] as const;
 
-const initialPresetLabels: Record<PeriodicClassicalInitialPreset, string> = {
-  'gaussian-displacement': 'Gaussian displacement',
-  'gaussian-velocity': 'Gaussian velocity',
-  'single-site-displacement': 'Single-site displacement',
-  'standing-mode-2': 'Standing mode n = 2',
+const initialPresetLabels: Record<PeriodicQuantumInitialPreset, string> = {
+  'site-localized': 'Site-localized state',
+  'gaussian-wavepacket': 'Gaussian wavepacket',
+  'selected-normal-mode': 'Selected normal mode',
+  'counterpropagating-superposition': 'Counterpropagating superposition',
 };
 
-export function PrototypeControls({
+export function QuantumPrototypeControls({
   mode,
   config,
   quantity,
   playing,
   speed,
   showLattice,
-  showSprings,
   onModeChange,
   onConfigChange,
   onQuantityChange,
@@ -49,18 +46,18 @@ export function PrototypeControls({
   onStep,
   onSpeedChange,
   onShowLatticeChange,
-  onShowSpringsChange,
-}: PrototypeControlsProps): React.JSX.Element {
+}: QuantumPrototypeControlsProps): React.JSX.Element {
   return (
     <section className="control-panel">
       <div className="control-header">
         <div>
-          <p className="eyebrow">Phase 2 Prototype</p>
-          <h2>1D periodic classical lattice</h2>
+          <p className="eyebrow">Phase 3 Prototype</p>
+          <h2>1D periodic free-field one-particle mode</h2>
         </div>
         <p className="control-note">
-          Symplectic time stepping on a nearest-neighbour periodic chain. This
-          is the first validated system before broader generalisation.
+          Free-field one-particle quantum pedagogical mode. The evolved Hilbert
+          space is the one-particle sector of the periodic lattice: one complex
+          amplitude per site, advanced exactly in the normal-mode basis.
         </p>
       </div>
 
@@ -71,13 +68,13 @@ export function PrototypeControls({
         />
 
         <label>
-          <span>Initial condition</span>
+          <span>Initial state</span>
           <select
             value={config.initialPreset}
             onChange={(event) =>
               onConfigChange({
                 ...config,
-                initialPreset: event.target.value as PeriodicClassicalInitialPreset,
+                initialPreset: event.target.value as PeriodicQuantumInitialPreset,
               })
             }
           >
@@ -115,17 +112,36 @@ export function PrototypeControls({
         </label>
 
         <label>
-          <span>Quantity</span>
+          <span>Displayed quantity</span>
           <select
             value={quantity}
             onChange={(event) =>
-              onQuantityChange(event.target.value as Classical1DPeriodicQuantity)
+              onQuantityChange(event.target.value as Quantum1DPeriodicQuantity)
             }
           >
-            <option value="displacement">Displacement</option>
-            <option value="velocity">Velocity</option>
-            <option value="energy-density">Local energy density</option>
+            <option value="probability-density">Probability density</option>
+            <option value="magnitude">Magnitude |psi|</option>
+            <option value="real-part">Real part</option>
+            <option value="imaginary-part">Imaginary part</option>
           </select>
+        </label>
+
+        <label>
+          <span>Carrier mode</span>
+          <input
+            aria-label="Carrier mode"
+            max={12}
+            min={0}
+            step={1}
+            type="range"
+            value={config.modeNumber}
+            onChange={(event) =>
+              onConfigChange({
+                ...config,
+                modeNumber: Number(event.target.value),
+              })
+            }
+          />
         </label>
 
         <label>
@@ -149,16 +165,7 @@ export function PrototypeControls({
             type="checkbox"
             onChange={(event) => onShowLatticeChange(event.target.checked)}
           />
-          <span>Show oscillator sites</span>
-        </label>
-
-        <label className="toggle">
-          <input
-            checked={showSprings}
-            type="checkbox"
-            onChange={(event) => onShowSpringsChange(event.target.checked)}
-          />
-          <span>Show bond hints</span>
+          <span>Show lattice sites</span>
         </label>
       </div>
 

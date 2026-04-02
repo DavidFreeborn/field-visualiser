@@ -3,14 +3,18 @@ import type {
   Classical1DPeriodicQuantity,
   Classical1DPeriodicSnapshot,
 } from '../../physics/classical/classical1dPeriodic';
+import type {
+  Quantum1DPeriodicQuantity,
+  Quantum1DPeriodicSnapshot,
+} from '../../physics/quantum/quantum1dPeriodic';
 import {
   PeriodicClassicalFieldRenderer,
   type PeriodicClassicalFieldRendererOptions,
 } from '../../rendering/pixi/PeriodicClassicalFieldRenderer';
 
 interface PrototypeCanvasProps {
-  readonly snapshot: Classical1DPeriodicSnapshot;
-  readonly quantity: Classical1DPeriodicQuantity;
+  readonly snapshot: Classical1DPeriodicSnapshot | Quantum1DPeriodicSnapshot;
+  readonly quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity;
   readonly showLattice: boolean;
   readonly showSprings: boolean;
 }
@@ -85,9 +89,10 @@ export function PrototypeCanvas({
       />
       <div className="visual-caption">
         <p>
-          Displaying the periodic chain in an unwrapped view. Signed quantities
-          use a restrained blue-white-red map; energy density uses a red
-          sequential map.
+          This 1D circle is rendered as an unwrapped periodic line: the left and
+          right edges are adjacent lattice sites on the same ring. Signed
+          quantities use a restrained blue-white-red map; probability density
+          and other unsigned quantities use a red sequential map.
         </p>
       </div>
     </section>

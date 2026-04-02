@@ -3,13 +3,19 @@ import type {
   Classical1DPeriodicQuantity,
   Classical1DPeriodicSnapshot,
 } from '../../physics/classical/classical1dPeriodic';
+import type {
+  Quantum1DPeriodicQuantity,
+  Quantum1DPeriodicSnapshot,
+} from '../../physics/quantum/quantum1dPeriodic';
 import { hexToNumber, mapDensityToSequentialColor, mapSignedValueToDivergingColor } from '../colorMaps';
 
 export interface PeriodicClassicalFieldRendererOptions {
   readonly showLattice: boolean;
   readonly showSprings: boolean;
-  readonly quantity: Classical1DPeriodicQuantity;
+  readonly quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity;
 }
+
+type Periodic1DSnapshot = Classical1DPeriodicSnapshot | Quantum1DPeriodicSnapshot;
 
 const PADDING_X = 28;
 const PADDING_Y = 30;
@@ -52,7 +58,7 @@ export class PeriodicClassicalFieldRenderer {
   }
 
   public render(
-    snapshot: Classical1DPeriodicSnapshot,
+    snapshot: Periodic1DSnapshot,
     options: PeriodicClassicalFieldRendererOptions,
   ): void {
     if (!this.initialised) {
@@ -66,6 +72,7 @@ export class PeriodicClassicalFieldRenderer {
     const innerHeight = Math.max(1, height - 2 * PADDING_Y);
     const values = getDisplayedValues(snapshot, options.quantity);
     const maxMagnitude = getMaxMagnitude(values) || 1;
+    const useSequentialMap = usesSequentialMap(options.quantity);
 
     this.background.clear();
     this.background
@@ -94,7 +101,7 @@ export class PeriodicClassicalFieldRenderer {
       }
 
       if (options.showLattice || options.showSprings) {
-        const color = options.quantity === 'energy-density'
+        const color = useSequentialMap
           ? hexToNumber(mapDensityToSequentialColor(values[index], maxMagnitude))
           : hexToNumber(mapSignedValueToDivergingColor(values[index], maxMagnitude));
 
@@ -102,12 +109,12 @@ export class PeriodicClassicalFieldRenderer {
           this.masses.circle(x, y, 3.2).fill({ color, alpha: 0.95 });
         }
 
-        if (options.showSprings && index < values.length - 1) {
+        if (options.showSprings && snapshot.kind === 'classical-1d-periodic' && index < values.length - 1) {
           const nextX = PADDING_X + (innerWidth * (index + 1)) / Math.max(1, values.length - 1);
           const nextY =
             baseline - (values[index + 1] / maxMagnitude) * innerHeight * 0.42;
           const bondColor =
-            options.quantity === 'energy-density'
+            useSequentialMap
               ? 0x8f2d28
               : hexToNumber(
                   mapSignedValueToDivergingColor(values[index + 1] - values[index], maxMagnitude),
@@ -136,17 +143,40 @@ export class PeriodicClassicalFieldRenderer {
 }
 
 function getDisplayedValues(
-  snapshot: Classical1DPeriodicSnapshot,
-  quantity: Classical1DPeriodicQuantity,
+  snapshot: Periodic1DSnapshot,
+  quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity,
 ): Float64Array {
-  switch (quantity) {
-    case 'displacement':
-      return snapshot.displacement;
-    case 'velocity':
-      return snapshot.velocity;
-    case 'energy-density':
-      return snapshot.localEnergyDensity;
+  if (snapshot.kind === 'classical-1d-periodic') {
+    switch (quantity) {
+      case 'displacement':
+        return snapshot.displacement;
+      case 'velocity':
+        return snapshot.velocity;
+      case 'energy-density':
+        return snapshot.localEnergyDensity;
+      default:
+        return snapshot.displacement;
+    }
   }
+
+  switch (quantity) {
+    case 'probability-density':
+      return snapshot.probabilityDensity;
+    case 'magnitude':
+      return snapshot.magnitude;
+    case 'real-part':
+      return snapshot.amplitudeReal;
+    case 'imaginary-part':
+      return snapshot.amplitudeImaginary;
+    default:
+      return snapshot.probabilityDensity;
+  }
+}
+
+function usesSequentialMap(
+  quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity,
+): boolean {
+  return quantity === 'energy-density' || quantity === 'probability-density' || quantity === 'magnitude';
 }
 
 function getMaxMagnitude(values: Float64Array): number {

@@ -1,8 +1,8 @@
-import type { Classical1DPeriodicDiagnostics } from '../../physics/classical/classical1dPeriodic';
-
 export interface StepLikeEngine {
   step(dt: number): void;
-  getDiagnostics(): Classical1DPeriodicDiagnostics;
+  getDiagnostics(): {
+    readonly recommendedDt: number;
+  };
 }
 
 export interface SimulationClockState {

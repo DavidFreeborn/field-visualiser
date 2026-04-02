@@ -33,6 +33,7 @@ vi.mock('../../rendering/pixi/PeriodicClassicalFieldRenderer', () => ({
 }));
 
 const snapshot: Classical1DPeriodicSnapshot = {
+  kind: 'classical-1d-periodic',
   time: 0,
   systemLabel: '1D circle',
   boundaryCondition: 'periodic',

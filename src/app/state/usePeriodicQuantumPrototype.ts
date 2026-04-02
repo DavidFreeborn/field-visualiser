@@ -1,49 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
-import { defaultClassical1DPeriodicConfig } from '../presets/classical1dPeriodic';
-import {
-  Classical1DPeriodicEngine,
-  type Classical1DPeriodicConfig,
-  type Classical1DPeriodicDiagnostics,
-  type Classical1DPeriodicQuantity,
-  type Classical1DPeriodicSnapshot,
-} from '../../physics/classical/classical1dPeriodic';
+import { defaultQuantum1DPeriodicConfig } from '../presets/quantum1dPeriodic';
 import { advanceSimulationClock } from './simulationClock';
+import {
+  Quantum1DPeriodicEngine,
+  type Quantum1DPeriodicConfig,
+  type Quantum1DPeriodicDiagnostics,
+  type Quantum1DPeriodicQuantity,
+  type Quantum1DPeriodicSnapshot,
+} from '../../physics/quantum/quantum1dPeriodic';
 
-interface PrototypeControllerState {
-  readonly config: Classical1DPeriodicConfig;
-  readonly quantity: Classical1DPeriodicQuantity;
+interface QuantumPrototypeControllerState {
+  readonly config: Quantum1DPeriodicConfig;
+  readonly quantity: Quantum1DPeriodicQuantity;
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
-  readonly showSprings: boolean;
-  readonly snapshot: Classical1DPeriodicSnapshot;
-  readonly diagnostics: Classical1DPeriodicDiagnostics;
-  readonly setConfig: (config: Classical1DPeriodicConfig) => void;
-  readonly setQuantity: (quantity: Classical1DPeriodicQuantity) => void;
+  readonly snapshot: Quantum1DPeriodicSnapshot;
+  readonly diagnostics: Quantum1DPeriodicDiagnostics;
+  readonly setConfig: (config: Quantum1DPeriodicConfig) => void;
+  readonly setQuantity: (quantity: Quantum1DPeriodicQuantity) => void;
   readonly setPlaying: (playing: boolean) => void;
   readonly setSpeed: (speed: number) => void;
   readonly setShowLattice: (showLattice: boolean) => void;
-  readonly setShowSprings: (showSprings: boolean) => void;
   readonly reset: () => void;
   readonly stepOnce: () => void;
 }
 
-export function usePeriodicClassicalPrototype(active = true): PrototypeControllerState {
-  const [config, setConfig] = useState(defaultClassical1DPeriodicConfig);
-  const [quantity, setQuantity] = useState<Classical1DPeriodicQuantity>('displacement');
+export function usePeriodicQuantumPrototype(active = true): QuantumPrototypeControllerState {
+  const [config, setConfig] = useState(defaultQuantum1DPeriodicConfig);
+  const [quantity, setQuantity] = useState<Quantum1DPeriodicQuantity>('probability-density');
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [showLattice, setShowLattice] = useState(true);
-  const [showSprings, setShowSprings] = useState(true);
 
-  const engineRef = useRef(new Classical1DPeriodicEngine(defaultClassical1DPeriodicConfig));
+  const engineRef = useRef(new Quantum1DPeriodicEngine(defaultQuantum1DPeriodicConfig));
   const carrySecondsRef = useRef(0);
-  const quantityRef = useRef<Classical1DPeriodicQuantity>('displacement');
+  const quantityRef = useRef<Quantum1DPeriodicQuantity>('probability-density');
 
-  const [snapshot, setSnapshot] = useState<Classical1DPeriodicSnapshot>(() =>
+  const [snapshot, setSnapshot] = useState<Quantum1DPeriodicSnapshot>(() =>
     engineRef.current.getSnapshot(quantity),
   );
-  const [diagnostics, setDiagnostics] = useState<Classical1DPeriodicDiagnostics>(() =>
+  const [diagnostics, setDiagnostics] = useState<Quantum1DPeriodicDiagnostics>(() =>
     engineRef.current.getDiagnostics(),
   );
 
@@ -104,7 +101,6 @@ export function usePeriodicClassicalPrototype(active = true): PrototypeControlle
     playing,
     speed,
     showLattice,
-    showSprings,
     snapshot,
     diagnostics,
     setConfig,
@@ -112,7 +108,6 @@ export function usePeriodicClassicalPrototype(active = true): PrototypeControlle
     setPlaying,
     setSpeed,
     setShowLattice,
-    setShowSprings,
     reset: () => {
       engineRef.current.reset(config);
       carrySecondsRef.current = 0;
