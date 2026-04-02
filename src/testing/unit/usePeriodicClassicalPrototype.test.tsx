@@ -5,6 +5,27 @@ import { vi } from 'vitest';
 import { usePeriodicClassicalPrototype } from '../../app/state/usePeriodicClassicalPrototype';
 
 describe('usePeriodicClassicalPrototype', () => {
+  it('does not schedule animation frames while inactive', () => {
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation(() => 1);
+    const cancelAnimationFrameSpy = vi
+      .spyOn(window, 'cancelAnimationFrame')
+      .mockImplementation(() => undefined);
+
+    function Probe(): React.JSX.Element {
+      usePeriodicClassicalPrototype(false);
+      return <div>inactive</div>;
+    }
+
+    render(<Probe />);
+
+    expect(requestAnimationFrameSpy).not.toHaveBeenCalled();
+
+    requestAnimationFrameSpy.mockRestore();
+    cancelAnimationFrameSpy.mockRestore();
+  });
+
   it('does not reset the simulation when changing displayed quantity', async () => {
     const user = userEvent.setup();
 

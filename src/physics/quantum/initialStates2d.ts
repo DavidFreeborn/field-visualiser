@@ -102,9 +102,9 @@ export function discreteFourierTransform2D(
   real: Float64Array,
   imaginary: Float64Array,
   size: number,
+  outReal: Float64Array = new Float64Array(real.length),
+  outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const outReal = new Float64Array(real.length);
-  const outImaginary = new Float64Array(real.length);
   const normalization = 1 / size;
 
   for (let ky = 0; ky < size; ky += 1) {
@@ -136,9 +136,9 @@ export function inverseDiscreteFourierTransform2D(
   real: Float64Array,
   imaginary: Float64Array,
   size: number,
+  outReal: Float64Array = new Float64Array(real.length),
+  outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const outReal = new Float64Array(real.length);
-  const outImaginary = new Float64Array(real.length);
   const normalization = 1 / size;
 
   for (let y = 0; y < size; y += 1) {
@@ -170,9 +170,9 @@ export function sineTransform2D(
   real: Float64Array,
   imaginary: Float64Array,
   interiorSize: number,
+  outReal: Float64Array = new Float64Array(real.length),
+  outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const outReal = new Float64Array(real.length);
-  const outImaginary = new Float64Array(real.length);
   const normalization = 2 / (interiorSize + 1);
 
   for (let my = 0; my < interiorSize; my += 1) {
@@ -204,9 +204,9 @@ export function inverseSineTransform2D(
   real: Float64Array,
   imaginary: Float64Array,
   interiorSize: number,
+  outReal: Float64Array = new Float64Array(real.length),
+  outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const outReal = new Float64Array(real.length);
-  const outImaginary = new Float64Array(real.length);
   const normalization = 2 / (interiorSize + 1);
 
   for (let y = 0; y < interiorSize; y += 1) {
@@ -237,23 +237,25 @@ export function inverseSineTransform2D(
 export function embedInteriorState(
   size: number,
   state: ComplexStateVector,
+  outReal: Float64Array = new Float64Array(size * size),
+  outImaginary: Float64Array = new Float64Array(size * size),
 ): ComplexStateVector {
-  const embeddedReal = new Float64Array(size * size);
-  const embeddedImaginary = new Float64Array(size * size);
   const interiorSize = size - 2;
+  outReal.fill(0);
+  outImaginary.fill(0);
 
   for (let y = 0; y < interiorSize; y += 1) {
     for (let x = 0; x < interiorSize; x += 1) {
       const interiorIndex = flattenIndex2D(x, y, interiorSize);
       const embeddedIndex = flattenIndex2D(x + 1, y + 1, size);
-      embeddedReal[embeddedIndex] = state.real[interiorIndex];
-      embeddedImaginary[embeddedIndex] = state.imaginary[interiorIndex];
+      outReal[embeddedIndex] = state.real[interiorIndex];
+      outImaginary[embeddedIndex] = state.imaginary[interiorIndex];
     }
   }
 
   return {
-    real: embeddedReal,
-    imaginary: embeddedImaginary,
+    real: outReal,
+    imaginary: outImaginary,
   };
 }
 
@@ -261,23 +263,23 @@ export function extractInteriorState(
   size: number,
   real: Float64Array,
   imaginary: Float64Array,
+  outReal: Float64Array = new Float64Array((size - 2) * (size - 2)),
+  outImaginary: Float64Array = new Float64Array((size - 2) * (size - 2)),
 ): ComplexStateVector {
   const interiorSize = size - 2;
-  const interiorReal = new Float64Array(interiorSize * interiorSize);
-  const interiorImaginary = new Float64Array(interiorSize * interiorSize);
 
   for (let y = 0; y < interiorSize; y += 1) {
     for (let x = 0; x < interiorSize; x += 1) {
       const interiorIndex = flattenIndex2D(x, y, interiorSize);
       const embeddedIndex = flattenIndex2D(x + 1, y + 1, size);
-      interiorReal[interiorIndex] = real[embeddedIndex];
-      interiorImaginary[interiorIndex] = imaginary[embeddedIndex];
+      outReal[interiorIndex] = real[embeddedIndex];
+      outImaginary[interiorIndex] = imaginary[embeddedIndex];
     }
   }
 
   return {
-    real: interiorReal,
-    imaginary: interiorImaginary,
+    real: outReal,
+    imaginary: outImaginary,
   };
 }
 

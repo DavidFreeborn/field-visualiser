@@ -98,6 +98,10 @@ export function useQuantum2DPrototype(
   }, [quantity]);
 
   useEffect(() => {
+    if (!active || !playing) {
+      return undefined;
+    }
+
     let frameId = 0;
     let lastTimestamp = 0;
 
@@ -109,19 +113,17 @@ export function useQuantum2DPrototype(
       const elapsedSeconds = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
 
-      if (active && playing) {
-        const clockState = advanceSimulationClock(
-          engineRef.current,
-          elapsedSeconds,
-          speed,
-          carrySecondsRef.current,
-        );
-        carrySecondsRef.current = clockState.carrySeconds;
+      const clockState = advanceSimulationClock(
+        engineRef.current,
+        elapsedSeconds,
+        speed,
+        carrySecondsRef.current,
+      );
+      carrySecondsRef.current = clockState.carrySeconds;
 
-        if (clockState.consumedSubsteps > 0) {
-          setSnapshot(engineRef.current.getSnapshot(quantity));
-          setDiagnostics(engineRef.current.getDiagnostics());
-        }
+      if (clockState.consumedSubsteps > 0) {
+        setSnapshot(engineRef.current.getSnapshot(quantity));
+        setDiagnostics(engineRef.current.getDiagnostics());
       }
 
       frameId = window.requestAnimationFrame(renderFrame);

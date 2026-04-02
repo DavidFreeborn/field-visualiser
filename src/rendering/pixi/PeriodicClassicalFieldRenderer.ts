@@ -1,4 +1,11 @@
-import { Application, Container, Graphics } from 'pixi.js';
+import {
+  Application,
+  BufferImageSource,
+  Container,
+  Graphics,
+  Sprite,
+  Texture,
+} from 'pixi.js';
 import type {
   Classical1DPeriodicQuantity,
   Classical1DPeriodicSnapshot,
@@ -56,6 +63,13 @@ type Periodic1DSnapshot =
 
 const PADDING_X = 28;
 const PADDING_Y = 30;
+const MAX_HEATMAP_PIXELS = 180_000;
+const MIN_HEATMAP_AXIS = 24;
+const MAX_LATTICE_MARKERS_2D = 4_096;
+const TARGET_FRAME_TIME_MS = 14;
+const FRAME_TIME_LOWER_BOUND_MS = 10;
+const ADAPTIVE_QUALITY_MIN = 0.45;
+const ADAPTIVE_QUALITY_STEP = 0.08;
 
 export class PeriodicClassicalFieldRenderer {
   private readonly host: HTMLElement;
@@ -65,6 +79,8 @@ export class PeriodicClassicalFieldRenderer {
   private readonly root = new Container();
 
   private readonly background = new Graphics();
+
+  private readonly heatmap = new Sprite();
 
   private readonly guides = new Graphics();
 
@@ -77,6 +93,20 @@ export class PeriodicClassicalFieldRenderer {
   private initialised = false;
 
   private lastChromeKey = '';
+
+  private heatmapTexture: Texture<BufferImageSource> | null = null;
+
+  private heatmapSource: BufferImageSource | null = null;
+
+  private heatmapPixels = new Uint8Array(0);
+
+  private downsampleAccum = new Float64Array(0);
+
+  private downsampleCounts = new Uint32Array(0);
+
+  private adaptiveQuality = 1;
+
+  private smoothedRenderTimeMs = 0;
 
   public constructor(host: HTMLElement) {
     this.host = host;
@@ -91,7 +121,15 @@ export class PeriodicClassicalFieldRenderer {
     });
 
     this.host.appendChild(this.app.canvas);
-    this.root.addChild(this.background, this.guides, this.bonds, this.waveform, this.masses);
+    this.heatmap.visible = false;
+    this.root.addChild(
+      this.background,
+      this.heatmap,
+      this.guides,
+      this.bonds,
+      this.waveform,
+      this.masses,
+    );
     this.app.stage.addChild(this.root);
     this.initialised = true;
   }
@@ -116,6 +154,7 @@ export class PeriodicClassicalFieldRenderer {
       return;
     }
 
+    this.heatmap.visible = false;
     const values = getDisplayedValues(snapshot, options.quantity);
     const maxMagnitude = getMaxMagnitude(values) || 1;
     const useSequentialMap = usesSequentialMap(options.quantity);
@@ -188,6 +227,7 @@ export class PeriodicClassicalFieldRenderer {
       return;
     }
 
+    this.destroyHeatmapResources();
     this.app.destroy(undefined, { children: true });
     this.initialised = false;
   }
@@ -198,6 +238,7 @@ export class PeriodicClassicalFieldRenderer {
     height: number,
     options: PeriodicClassicalFieldRendererOptions,
   ): void {
+    const renderStart = performance.now();
     const values = getDisplayedValues(snapshot, options.quantity);
     const maxMagnitude = getMaxMagnitude(values) || 1;
     const useSequentialMap = usesSequentialMap(options.quantity);
@@ -205,31 +246,52 @@ export class PeriodicClassicalFieldRenderer {
     const rows = snapshot.height;
     const innerWidth = Math.max(1, width - 2 * PADDING_X);
     const innerHeight = Math.max(1, height - 2 * PADDING_Y);
-    const cellWidth = innerWidth / cols;
-    const cellHeight = innerHeight / rows;
+    const displayGrid = selectHeatmapGrid(
+      cols,
+      rows,
+      innerWidth,
+      innerHeight,
+      this.adaptiveQuality,
+    );
 
     this.drawChrome(width, height);
     this.waveform.clear();
     this.bonds.clear();
     this.masses.clear();
+    this.ensureHeatmapTexture(displayGrid.width, displayGrid.height);
+    populateHeatmapPixels({
+      values,
+      cols,
+      rows,
+      targetCols: displayGrid.width,
+      targetRows: displayGrid.height,
+      maxMagnitude,
+      useSequentialMap,
+      heatmapPixels: this.heatmapPixels,
+      downsampleAccum: this.downsampleAccum,
+      downsampleCounts: this.downsampleCounts,
+    });
 
-    for (let y = 0; y < rows; y += 1) {
-      for (let x = 0; x < cols; x += 1) {
-        const index = y * cols + x;
-        const color = useSequentialMap
-          ? mapDensityToSequentialNumber(values[index], maxMagnitude)
-          : mapSignedValueToDivergingNumber(values[index], maxMagnitude);
-        this.waveform
-          .rect(PADDING_X + x * cellWidth, PADDING_Y + y * cellHeight, cellWidth + 0.5, cellHeight + 0.5)
-          .fill({ color, alpha: 0.98 });
-
-        if (options.showLattice) {
-          this.masses
-            .circle(PADDING_X + (x + 0.5) * cellWidth, PADDING_Y + (y + 0.5) * cellHeight, 1.1)
-            .fill({ color: 0x17202a, alpha: 0.2 });
-        }
-      }
+    if (this.heatmapSource === null || this.heatmapTexture === null) {
+      throw new Error('2D heatmap resources were not initialised.');
     }
+
+    this.heatmapSource.scaleMode =
+      displayGrid.width < cols || displayGrid.height < rows ? 'linear' : 'nearest';
+    this.heatmapSource.update();
+    this.heatmap.texture = this.heatmapTexture;
+    this.heatmap.visible = true;
+    this.heatmap.alpha = 0.98;
+    this.heatmap.x = PADDING_X;
+    this.heatmap.y = PADDING_Y;
+    this.heatmap.width = innerWidth;
+    this.heatmap.height = innerHeight;
+
+    if (options.showLattice) {
+      this.render2DLatticeOverlay(cols, rows, innerWidth, innerHeight);
+    }
+
+    this.updateAdaptiveQuality(performance.now() - renderStart);
   }
 
   private renderCircular1D(
@@ -303,6 +365,83 @@ export class PeriodicClassicalFieldRenderer {
     }
 
     this.waveform.closePath().stroke({ width: 2.5, color: 0x18222c, alpha: 0.95 });
+  }
+
+  private render2DLatticeOverlay(
+    cols: number,
+    rows: number,
+    innerWidth: number,
+    innerHeight: number,
+  ): void {
+    const stride = Math.max(1, Math.ceil(Math.sqrt((cols * rows) / MAX_LATTICE_MARKERS_2D)));
+    const cellWidth = innerWidth / cols;
+    const cellHeight = innerHeight / rows;
+
+    for (let y = 0; y < rows; y += stride) {
+      for (let x = 0; x < cols; x += stride) {
+        this.masses
+          .circle(PADDING_X + (x + 0.5) * cellWidth, PADDING_Y + (y + 0.5) * cellHeight, 1.1)
+          .fill({ color: 0x17202a, alpha: 0.2 });
+      }
+    }
+  }
+
+  private ensureHeatmapTexture(width: number, height: number): void {
+    if (
+      this.heatmapSource !== null &&
+      this.heatmapTexture !== null &&
+      this.heatmapSource.resourceWidth === width &&
+      this.heatmapSource.resourceHeight === height
+    ) {
+      return;
+    }
+
+    this.destroyHeatmapResources();
+    this.heatmapPixels = new Uint8Array(width * height * 4);
+    this.downsampleAccum = new Float64Array(width * height);
+    this.downsampleCounts = new Uint32Array(width * height);
+    this.heatmapSource = new BufferImageSource({
+      resource: this.heatmapPixels,
+      width,
+      height,
+      alphaMode: 'premultiply-alpha-on-upload',
+      antialias: false,
+      autoGenerateMipmaps: false,
+      autoGarbageCollect: false,
+      scaleMode: 'nearest',
+      label: 'field-visualiser-heatmap',
+    });
+    this.heatmapTexture = new Texture({
+      source: this.heatmapSource,
+      dynamic: true,
+      label: 'field-visualiser-heatmap-texture',
+    });
+  }
+
+  private destroyHeatmapResources(): void {
+    this.heatmap.texture = Texture.EMPTY;
+    this.heatmapTexture?.destroy(true);
+    this.heatmapTexture = null;
+    this.heatmapSource = null;
+  }
+
+  private updateAdaptiveQuality(frameTimeMs: number): void {
+    this.smoothedRenderTimeMs =
+      this.smoothedRenderTimeMs === 0
+        ? frameTimeMs
+        : this.smoothedRenderTimeMs * 0.82 + frameTimeMs * 0.18;
+
+    if (this.smoothedRenderTimeMs > TARGET_FRAME_TIME_MS) {
+      this.adaptiveQuality = Math.max(
+        ADAPTIVE_QUALITY_MIN,
+        this.adaptiveQuality - ADAPTIVE_QUALITY_STEP,
+      );
+      return;
+    }
+
+    if (this.smoothedRenderTimeMs < FRAME_TIME_LOWER_BOUND_MS) {
+      this.adaptiveQuality = Math.min(1, this.adaptiveQuality + ADAPTIVE_QUALITY_STEP * 0.5);
+    }
   }
 
   private drawChrome(width: number, height: number, baseline?: number): void {
@@ -416,4 +555,108 @@ function getMaxMagnitude(values: Float64Array): number {
   }
 
   return maxMagnitude;
+}
+
+function selectHeatmapGrid(
+  cols: number,
+  rows: number,
+  innerWidth: number,
+  innerHeight: number,
+  adaptiveQuality: number,
+): { width: number; height: number } {
+  const cappedWidth = Math.min(cols, Math.max(MIN_HEATMAP_AXIS, Math.round(innerWidth * adaptiveQuality)));
+  const cappedHeight = Math.min(
+    rows,
+    Math.max(MIN_HEATMAP_AXIS, Math.round(innerHeight * adaptiveQuality)),
+  );
+  let width = cappedWidth;
+  let height = cappedHeight;
+  const maxPixels = Math.max(
+    MIN_HEATMAP_AXIS * MIN_HEATMAP_AXIS,
+    Math.round(MAX_HEATMAP_PIXELS * adaptiveQuality * adaptiveQuality),
+  );
+
+  if (width * height > maxPixels) {
+    const scale = Math.sqrt(maxPixels / (width * height));
+    width = Math.max(MIN_HEATMAP_AXIS, Math.min(cols, Math.floor(width * scale)));
+    height = Math.max(MIN_HEATMAP_AXIS, Math.min(rows, Math.floor(height * scale)));
+  }
+
+  return {
+    width: Math.max(1, width),
+    height: Math.max(1, height),
+  };
+}
+
+function populateHeatmapPixels({
+  values,
+  cols,
+  rows,
+  targetCols,
+  targetRows,
+  maxMagnitude,
+  useSequentialMap,
+  heatmapPixels,
+  downsampleAccum,
+  downsampleCounts,
+}: {
+  values: Float64Array;
+  cols: number;
+  rows: number;
+  targetCols: number;
+  targetRows: number;
+  maxMagnitude: number;
+  useSequentialMap: boolean;
+  heatmapPixels: Uint8Array;
+  downsampleAccum: Float64Array;
+  downsampleCounts: Uint32Array;
+}): void {
+  if (targetCols === cols && targetRows === rows) {
+    for (let index = 0; index < values.length; index += 1) {
+      writeColorToPixelBuffer(
+        heatmapPixels,
+        index * 4,
+        useSequentialMap
+          ? mapDensityToSequentialNumber(values[index], maxMagnitude)
+          : mapSignedValueToDivergingNumber(values[index], maxMagnitude),
+      );
+    }
+    return;
+  }
+
+  downsampleAccum.fill(0);
+  downsampleCounts.fill(0);
+
+  for (let y = 0; y < rows; y += 1) {
+    const targetY = Math.min(targetRows - 1, Math.floor((y * targetRows) / rows));
+    for (let x = 0; x < cols; x += 1) {
+      const targetX = Math.min(targetCols - 1, Math.floor((x * targetCols) / cols));
+      const targetIndex = targetY * targetCols + targetX;
+      downsampleAccum[targetIndex] += values[y * cols + x];
+      downsampleCounts[targetIndex] += 1;
+    }
+  }
+
+  for (let index = 0; index < targetCols * targetRows; index += 1) {
+    const averagedValue =
+      downsampleCounts[index] === 0 ? 0 : downsampleAccum[index] / downsampleCounts[index];
+    writeColorToPixelBuffer(
+      heatmapPixels,
+      index * 4,
+      useSequentialMap
+        ? mapDensityToSequentialNumber(averagedValue, maxMagnitude)
+        : mapSignedValueToDivergingNumber(averagedValue, maxMagnitude),
+    );
+  }
+}
+
+function writeColorToPixelBuffer(
+  buffer: Uint8Array,
+  offset: number,
+  color: number,
+): void {
+  buffer[offset] = (color >> 16) & 0xff;
+  buffer[offset + 1] = (color >> 8) & 0xff;
+  buffer[offset + 2] = color & 0xff;
+  buffer[offset + 3] = 255;
 }

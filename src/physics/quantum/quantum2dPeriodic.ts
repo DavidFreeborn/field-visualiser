@@ -70,6 +70,9 @@ export class Quantum2DPeriodicEngine
   private modeImaginary = new Float64Array(0);
   private siteReal = new Float64Array(0);
   private siteImaginary = new Float64Array(0);
+  private magnitude = new Float64Array(0);
+  private probabilityDensity = new Float64Array(0);
+  private modeWeights = new Float64Array(0);
 
   public constructor(config: Quantum2DPeriodicConfig) {
     this.reset(config);
@@ -97,10 +100,19 @@ export class Quantum2DPeriodicEngine
 
     this.siteReal = new Float64Array(initialSiteState.real);
     this.siteImaginary = new Float64Array(initialSiteState.imaginary);
+    this.magnitude = new Float64Array(initialSiteState.real.length);
+    this.probabilityDensity = new Float64Array(initialSiteState.real.length);
+    this.modeWeights = new Float64Array(initialSiteState.real.length);
 
-    const modeState = discreteFourierTransform2D(this.siteReal, this.siteImaginary, config.size);
-    this.modeReal = new Float64Array(modeState.real);
-    this.modeImaginary = new Float64Array(modeState.imaginary);
+    this.modeReal = new Float64Array(initialSiteState.real.length);
+    this.modeImaginary = new Float64Array(initialSiteState.real.length);
+    discreteFourierTransform2D(
+      this.siteReal,
+      this.siteImaginary,
+      config.size,
+      this.modeReal,
+      this.modeImaginary,
+    );
   }
 
   public step(dt: number): void {
@@ -122,13 +134,13 @@ export class Quantum2DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    const siteState = inverseDiscreteFourierTransform2D(
+    inverseDiscreteFourierTransform2D(
       this.modeReal,
       this.modeImaginary,
       this.config.size,
+      this.siteReal,
+      this.siteImaginary,
     );
-    this.siteReal = new Float64Array(siteState.real);
-    this.siteImaginary = new Float64Array(siteState.imaginary);
     this.time += dt;
   }
 
@@ -139,15 +151,15 @@ export class Quantum2DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    const magnitude = new Float64Array(this.siteReal.length);
-    const probabilityDensity = new Float64Array(this.siteReal.length);
-
     for (let index = 0; index < this.siteReal.length; index += 1) {
       const amplitudeSquared =
         this.siteReal[index] * this.siteReal[index] +
         this.siteImaginary[index] * this.siteImaginary[index];
-      magnitude[index] = Math.sqrt(amplitudeSquared);
-      probabilityDensity[index] = amplitudeSquared;
+      this.magnitude[index] = Math.sqrt(amplitudeSquared);
+      this.probabilityDensity[index] = amplitudeSquared;
+      this.modeWeights[index] =
+        this.modeReal[index] * this.modeReal[index] +
+        this.modeImaginary[index] * this.modeImaginary[index];
     }
 
     return {
@@ -164,9 +176,9 @@ export class Quantum2DPeriodicEngine
       geometry: 'torus-periodic',
       amplitudeReal: this.siteReal.slice(),
       amplitudeImaginary: this.siteImaginary.slice(),
-      magnitude,
-      probabilityDensity,
-      modeWeights: computeModeWeights(this.modeReal, this.modeImaginary),
+      magnitude: this.magnitude.slice(),
+      probabilityDensity: this.probabilityDensity.slice(),
+      modeWeights: this.modeWeights.slice(),
       totalNorm: computeDiscreteNorm(this.siteReal, this.siteImaginary),
     };
   }
@@ -210,17 +222,6 @@ function buildModeFrequencies2D(
 
   return frequencies;
 }
-
-function computeModeWeights(real: Float64Array, imaginary: Float64Array): Float64Array {
-  const weights = new Float64Array(real.length);
-
-  for (let index = 0; index < real.length; index += 1) {
-    weights[index] = real[index] * real[index] + imaginary[index] * imaginary[index];
-  }
-
-  return weights;
-}
-
 function assertValidConfig(config: Quantum2DPeriodicConfig): void {
   if (!Number.isInteger(config.size) || config.size < 8) {
     throw new Error('size must be an integer greater than or equal to 8.');

@@ -69,6 +69,11 @@ export class Quantum2DFixedEngine
   private modeImaginary = new Float64Array(0);
   private siteReal = new Float64Array(0);
   private siteImaginary = new Float64Array(0);
+  private interiorReal = new Float64Array(0);
+  private interiorImaginary = new Float64Array(0);
+  private magnitude = new Float64Array(0);
+  private probabilityDensity = new Float64Array(0);
+  private modeWeights = new Float64Array(0);
 
   public constructor(config: Quantum2DFixedConfig) {
     this.reset(config);
@@ -101,19 +106,28 @@ export class Quantum2DFixedEngine
 
     this.siteReal = new Float64Array(initialSiteState.real);
     this.siteImaginary = new Float64Array(initialSiteState.imaginary);
+    this.magnitude = new Float64Array(initialSiteState.real.length);
+    this.probabilityDensity = new Float64Array(initialSiteState.real.length);
+    this.modeWeights = new Float64Array(this.interiorSize * this.interiorSize);
+    this.interiorReal = new Float64Array(this.interiorSize * this.interiorSize);
+    this.interiorImaginary = new Float64Array(this.interiorSize * this.interiorSize);
 
-    const interiorState = extractInteriorState(
+    extractInteriorState(
       config.size,
       this.siteReal,
       this.siteImaginary,
+      this.interiorReal,
+      this.interiorImaginary,
     );
-    const modeState = sineTransform2D(
-      interiorState.real,
-      interiorState.imaginary,
+    this.modeReal = new Float64Array(this.interiorSize * this.interiorSize);
+    this.modeImaginary = new Float64Array(this.interiorSize * this.interiorSize);
+    sineTransform2D(
+      this.interiorReal,
+      this.interiorImaginary,
       this.interiorSize,
+      this.modeReal,
+      this.modeImaginary,
     );
-    this.modeReal = new Float64Array(modeState.real);
-    this.modeImaginary = new Float64Array(modeState.imaginary);
   }
 
   public step(dt: number): void {
@@ -131,14 +145,22 @@ export class Quantum2DFixedEngine
       this.modeImaginary[index] = real * sinPhase + imaginary * cosPhase;
     }
 
-    const interiorSiteState = inverseSineTransform2D(
+    inverseSineTransform2D(
       this.modeReal,
       this.modeImaginary,
       this.interiorSize,
+      this.interiorReal,
+      this.interiorImaginary,
     );
-    const fullState = embedInteriorState(this.interiorSize + 2, interiorSiteState);
-    this.siteReal = new Float64Array(fullState.real);
-    this.siteImaginary = new Float64Array(fullState.imaginary);
+    embedInteriorState(
+      this.interiorSize + 2,
+      {
+        real: this.interiorReal,
+        imaginary: this.interiorImaginary,
+      },
+      this.siteReal,
+      this.siteImaginary,
+    );
     this.time += dt;
   }
 
@@ -149,15 +171,18 @@ export class Quantum2DFixedEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    const magnitude = new Float64Array(this.siteReal.length);
-    const probabilityDensity = new Float64Array(this.siteReal.length);
-
     for (let index = 0; index < this.siteReal.length; index += 1) {
       const amplitudeSquared =
         this.siteReal[index] * this.siteReal[index] +
         this.siteImaginary[index] * this.siteImaginary[index];
-      magnitude[index] = Math.sqrt(amplitudeSquared);
-      probabilityDensity[index] = amplitudeSquared;
+      this.magnitude[index] = Math.sqrt(amplitudeSquared);
+      this.probabilityDensity[index] = amplitudeSquared;
+    }
+
+    for (let index = 0; index < this.modeReal.length; index += 1) {
+      this.modeWeights[index] =
+        this.modeReal[index] * this.modeReal[index] +
+        this.modeImaginary[index] * this.modeImaginary[index];
     }
 
     return {
@@ -174,9 +199,9 @@ export class Quantum2DFixedEngine
       geometry: 'square-fixed',
       amplitudeReal: this.siteReal.slice(),
       amplitudeImaginary: this.siteImaginary.slice(),
-      magnitude,
-      probabilityDensity,
-      modeWeights: computeModeWeights(this.modeReal, this.modeImaginary),
+      magnitude: this.magnitude.slice(),
+      probabilityDensity: this.probabilityDensity.slice(),
+      modeWeights: this.modeWeights.slice(),
       totalNorm: computeDiscreteNorm(this.siteReal, this.siteImaginary),
     };
   }
@@ -220,17 +245,6 @@ function buildModeFrequencies2D(
 
   return frequencies;
 }
-
-function computeModeWeights(real: Float64Array, imaginary: Float64Array): Float64Array {
-  const weights = new Float64Array(real.length);
-
-  for (let index = 0; index < real.length; index += 1) {
-    weights[index] = real[index] * real[index] + imaginary[index] * imaginary[index];
-  }
-
-  return weights;
-}
-
 function assertValidConfig(config: Quantum2DFixedConfig): void {
   if (!Number.isInteger(config.size) || config.size < 5) {
     throw new Error('size must be an integer greater than or equal to 5.');

@@ -59,6 +59,10 @@ export function useFixedClassicalPrototype(active = true): FixedClassicalControl
   }, [quantity]);
 
   useEffect(() => {
+    if (!active || !playing) {
+      return undefined;
+    }
+
     let frameId = 0;
     let lastTimestamp = 0;
     const renderFrame = (timestamp: number): void => {
@@ -67,18 +71,16 @@ export function useFixedClassicalPrototype(active = true): FixedClassicalControl
       }
       const elapsedSeconds = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
-      if (active && playing) {
-        const clockState = advanceSimulationClock(
-          engineRef.current,
-          elapsedSeconds,
-          speed,
-          carrySecondsRef.current,
-        );
-        carrySecondsRef.current = clockState.carrySeconds;
-        if (clockState.consumedSubsteps > 0) {
-          setSnapshot(engineRef.current.getSnapshot(quantity));
-          setDiagnostics(engineRef.current.getDiagnostics());
-        }
+      const clockState = advanceSimulationClock(
+        engineRef.current,
+        elapsedSeconds,
+        speed,
+        carrySecondsRef.current,
+      );
+      carrySecondsRef.current = clockState.carrySeconds;
+      if (clockState.consumedSubsteps > 0) {
+        setSnapshot(engineRef.current.getSnapshot(quantity));
+        setDiagnostics(engineRef.current.getDiagnostics());
       }
       frameId = window.requestAnimationFrame(renderFrame);
     };
