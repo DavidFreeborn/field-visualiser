@@ -1,16 +1,16 @@
 import {
-  computePeriodicClassicalEnergy1D,
+  computeDirichletClassicalEnergy1D,
   type ClassicalPeriodicEnergyBreakdown1D,
 } from '../core/invariants';
-import { applyPeriodicLaplacian1D } from '../core/operators';
+import { applyDirichletLaplacian1D } from '../core/operators';
 import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
 import {
   createGaussianBump1D,
-  createStandingMode1D,
+  createStandingModeDirichlet1D,
   type Classical1DInitialPreset,
 } from './initialConditions';
 
-export interface Classical1DPeriodicConfig {
+export interface Classical1DFixedConfig {
   readonly siteCount: number;
   readonly waveSpeed: number;
   readonly domainLength: number;
@@ -20,15 +20,15 @@ export interface Classical1DPeriodicConfig {
   readonly initialPreset: Classical1DInitialPreset;
 }
 
-export type Classical1DPeriodicQuantity = 'displacement' | 'velocity' | 'energy-density';
+export type Classical1DFixedQuantity = 'displacement' | 'velocity' | 'energy-density';
 
-export interface Classical1DPeriodicSnapshot {
-  readonly kind: 'classical-1d-periodic';
+export interface Classical1DFixedSnapshot {
+  readonly kind: 'classical-1d-fixed';
   readonly time: number;
-  readonly systemLabel: '1D circle';
-  readonly boundaryCondition: 'periodic';
+  readonly systemLabel: '1D interval';
+  readonly boundaryCondition: 'dirichlet';
   readonly modeLabel: 'classical field';
-  readonly quantity: Classical1DPeriodicQuantity;
+  readonly quantity: Classical1DFixedQuantity;
   readonly siteCount: number;
   readonly domainLength: number;
   readonly spacing: number;
@@ -40,47 +40,36 @@ export interface Classical1DPeriodicSnapshot {
   readonly potentialEnergy: number;
 }
 
-export interface Classical1DPeriodicDiagnostics extends SimulationDiagnostics {
+export interface Classical1DFixedDiagnostics extends SimulationDiagnostics {
   readonly totalEnergy: number;
   readonly relativeEnergyDrift: number;
 }
 
 const STABILITY_SAFETY_FACTOR = 0.7;
 
-export class Classical1DPeriodicEngine
+export class Classical1DFixedEngine
   implements
-    SimulationEngine<
-      Classical1DPeriodicConfig,
-      Classical1DPeriodicSnapshot,
-      Classical1DPeriodicDiagnostics
-    >
+    SimulationEngine<Classical1DFixedConfig, Classical1DFixedSnapshot, Classical1DFixedDiagnostics>
 {
-  private config: Classical1DPeriodicConfig | null = null;
-
+  private config: Classical1DFixedConfig | null = null;
   private time = 0;
-
   private spacing = 1;
-
   private inverseSpacingSquared = 1;
-
   private displacement = new Float64Array(0);
-
   private velocity = new Float64Array(0);
-
   private acceleration = new Float64Array(0);
-
   private energyBaseline = 1;
 
-  public constructor(config: Classical1DPeriodicConfig) {
+  public constructor(config: Classical1DFixedConfig) {
     this.reset(config);
   }
 
-  public reset(config: Classical1DPeriodicConfig): void {
+  public reset(config: Classical1DFixedConfig): void {
     assertValidConfig(config);
 
     this.config = config;
     this.time = 0;
-    this.spacing = config.domainLength / config.siteCount;
+    this.spacing = config.domainLength / (config.siteCount - 1);
     this.inverseSpacingSquared = 1 / (this.spacing * this.spacing);
     this.displacement = new Float64Array(config.siteCount);
     this.velocity = new Float64Array(config.siteCount);
@@ -89,15 +78,12 @@ export class Classical1DPeriodicEngine
     const initialState = createInitialState(config);
     this.displacement.set(initialState.displacement);
     this.velocity.set(initialState.velocity);
+    this.enforceBoundaryConditions();
     this.updateAcceleration();
     this.energyBaseline = this.computeEnergy().total;
   }
 
   public step(dt: number): void {
-    if (this.config === null) {
-      throw new Error('Engine has not been initialised.');
-    }
-
     if (dt <= 0) {
       return;
     }
@@ -113,8 +99,8 @@ export class Classical1DPeriodicEngine
   }
 
   public getSnapshot(
-    quantity: Classical1DPeriodicQuantity = 'displacement',
-  ): Classical1DPeriodicSnapshot {
+    quantity: Classical1DFixedQuantity = 'displacement',
+  ): Classical1DFixedSnapshot {
     if (this.config === null) {
       throw new Error('Engine has not been initialised.');
     }
@@ -122,10 +108,10 @@ export class Classical1DPeriodicEngine
     const energy = this.computeEnergy();
 
     return {
-      kind: 'classical-1d-periodic',
+      kind: 'classical-1d-fixed',
       time: this.time,
-      systemLabel: '1D circle',
-      boundaryCondition: 'periodic',
+      systemLabel: '1D interval',
+      boundaryCondition: 'dirichlet',
       modeLabel: 'classical field',
       quantity,
       siteCount: this.config.siteCount,
@@ -140,7 +126,7 @@ export class Classical1DPeriodicEngine
     };
   }
 
-  public getDiagnostics(): Classical1DPeriodicDiagnostics {
+  public getDiagnostics(): Classical1DFixedDiagnostics {
     const totalEnergy = this.computeEnergy().total;
     const maxStableDt = this.getMaxStableDt();
     const recommendedDt = maxStableDt * STABILITY_SAFETY_FACTOR;
@@ -155,22 +141,28 @@ export class Classical1DPeriodicEngine
   }
 
   private integrateSingleStep(dt: number): void {
-    if (this.config === null) {
-      throw new Error('Engine has not been initialised.');
-    }
-
     const halfStep = 0.5 * dt;
 
-    for (let index = 0; index < this.velocity.length; index += 1) {
+    for (let index = 1; index < this.velocity.length - 1; index += 1) {
       this.velocity[index] += halfStep * this.acceleration[index];
       this.displacement[index] += dt * this.velocity[index];
     }
 
+    this.enforceBoundaryConditions();
     this.updateAcceleration();
 
-    for (let index = 0; index < this.velocity.length; index += 1) {
+    for (let index = 1; index < this.velocity.length - 1; index += 1) {
       this.velocity[index] += halfStep * this.acceleration[index];
     }
+
+    this.enforceBoundaryConditions();
+  }
+
+  private enforceBoundaryConditions(): void {
+    this.displacement[0] = 0;
+    this.displacement[this.displacement.length - 1] = 0;
+    this.velocity[0] = 0;
+    this.velocity[this.velocity.length - 1] = 0;
   }
 
   private updateAcceleration(): void {
@@ -178,11 +170,11 @@ export class Classical1DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    applyPeriodicLaplacian1D(this.displacement, this.inverseSpacingSquared, this.acceleration);
+    applyDirichletLaplacian1D(this.displacement, this.inverseSpacingSquared, this.acceleration);
 
     const accelerationScale = this.config.waveSpeed * this.config.waveSpeed;
 
-    for (let index = 0; index < this.acceleration.length; index += 1) {
+    for (let index = 1; index < this.acceleration.length - 1; index += 1) {
       this.acceleration[index] *= accelerationScale;
     }
   }
@@ -192,7 +184,7 @@ export class Classical1DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    return computePeriodicClassicalEnergy1D(
+    return computeDirichletClassicalEnergy1D(
       this.displacement,
       this.velocity,
       this.spacing,
@@ -209,7 +201,7 @@ export class Classical1DPeriodicEngine
   }
 }
 
-function createInitialState(config: Classical1DPeriodicConfig): {
+function createInitialState(config: Classical1DFixedConfig): {
   displacement: Float64Array;
   velocity: Float64Array;
 } {
@@ -236,30 +228,31 @@ function createInitialState(config: Classical1DPeriodicConfig): {
       );
       break;
     case 'single-site-displacement':
-      displacement[Math.round(config.initialCenter * (config.siteCount - 1)) % config.siteCount] =
+      displacement[Math.max(1, Math.min(config.siteCount - 2, Math.round(config.initialCenter * (config.siteCount - 1))))] =
         config.amplitude;
       break;
     case 'standing-mode-1':
-      displacement.set(createStandingMode1D(config.siteCount, 1, config.amplitude));
+      displacement.set(createStandingModeDirichlet1D(config.siteCount, 1, config.amplitude));
       break;
     case 'standing-mode-2':
-      displacement.set(createStandingMode1D(config.siteCount, 2, config.amplitude));
+      displacement.set(createStandingModeDirichlet1D(config.siteCount, 2, config.amplitude));
       break;
   }
+
+  displacement[0] = 0;
+  displacement[config.siteCount - 1] = 0;
+  velocity[0] = 0;
+  velocity[config.siteCount - 1] = 0;
 
   return { displacement, velocity };
 }
 
-function assertValidConfig(config: Classical1DPeriodicConfig): void {
-  if (!Number.isInteger(config.siteCount) || config.siteCount < 8) {
-    throw new Error('siteCount must be an integer greater than or equal to 8.');
+function assertValidConfig(config: Classical1DFixedConfig): void {
+  if (!Number.isInteger(config.siteCount) || config.siteCount < 4) {
+    throw new Error('siteCount must be an integer greater than or equal to 4.');
   }
 
-  if (config.domainLength <= 0 || config.waveSpeed <= 0) {
-    throw new Error('domainLength and waveSpeed must be positive.');
-  }
-
-  if (config.gaussianWidth <= 0) {
-    throw new Error('gaussianWidth must be positive.');
+  if (config.domainLength <= 0 || config.waveSpeed <= 0 || config.gaussianWidth <= 0) {
+    throw new Error('domainLength, waveSpeed, and gaussianWidth must be positive.');
   }
 }

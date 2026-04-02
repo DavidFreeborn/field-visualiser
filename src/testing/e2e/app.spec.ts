@@ -9,6 +9,9 @@ test('loads the application shell', async ({ page }) => {
     }),
   ).toBeVisible();
 
+  await page.getByLabel('Geometry').selectOption('fixed-interval');
+  await expect(page.getByText(/1d fixed-end classical lattice/i)).toBeVisible();
+
   await page.getByLabel(/interpretation mode/i).selectOption('quantum-one-particle');
   await expect(page.getByText(/free-field one-particle pedagogical/i)).toBeVisible();
 });

@@ -4,17 +4,18 @@ import {
   createQuantumInitialState,
   discreteFourierTransform,
   inverseDiscreteFourierTransform,
-  type PeriodicQuantumInitialPreset,
+  type Quantum1DInitialPreset,
 } from './initialStates';
 
 export interface Quantum1DPeriodicConfig {
   readonly siteCount: number;
   readonly waveSpeed: number;
   readonly domainLength: number;
+  readonly initialCenter: number;
   readonly gaussianWidth: number;
   readonly momentumWidth: number;
   readonly modeNumber: number;
-  readonly initialPreset: PeriodicQuantumInitialPreset;
+  readonly initialPreset: Quantum1DInitialPreset;
 }
 
 export type Quantum1DPeriodicQuantity =
@@ -88,7 +89,7 @@ export class Quantum1DPeriodicEngine
 
     const initialSiteState = createQuantumInitialState(config.initialPreset, {
       siteCount: config.siteCount,
-      amplitudeCenter: 0.5,
+      amplitudeCenter: config.initialCenter,
       gaussianWidth: config.gaussianWidth,
       modeNumber: config.modeNumber,
       momentumWidth: config.momentumWidth,

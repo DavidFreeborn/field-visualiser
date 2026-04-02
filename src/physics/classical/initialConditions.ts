@@ -4,10 +4,11 @@ export interface GaussianBumpOptions {
   readonly width: number;
 }
 
-export type PeriodicClassicalInitialPreset =
+export type Classical1DInitialPreset =
   | 'gaussian-displacement'
   | 'gaussian-velocity'
   | 'single-site-displacement'
+  | 'standing-mode-1'
   | 'standing-mode-2';
 
 export function createGaussianBump1D(
@@ -35,6 +36,21 @@ export function createStandingMode1D(
   for (let index = 0; index < siteCount; index += 1) {
     values[index] =
       amplitude * Math.cos((2 * Math.PI * modeNumber * index) / siteCount);
+  }
+
+  return values;
+}
+
+export function createStandingModeDirichlet1D(
+  siteCount: number,
+  modeNumber: number,
+  amplitude: number,
+): Float64Array {
+  const values = new Float64Array(siteCount);
+  const denominator = siteCount - 1;
+
+  for (let index = 1; index < siteCount - 1; index += 1) {
+    values[index] = amplitude * Math.sin((Math.PI * modeNumber * index) / denominator);
   }
 
   return values;

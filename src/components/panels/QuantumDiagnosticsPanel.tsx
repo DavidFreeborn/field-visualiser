@@ -1,10 +1,13 @@
 import type { Quantum1DPeriodicDiagnostics } from '../../physics/quantum/quantum1dPeriodic';
+import type { Quantum1DFixedDiagnostics } from '../../physics/quantum/quantum1dFixed';
 
 interface QuantumDiagnosticsPanelProps {
-  readonly diagnostics: Quantum1DPeriodicDiagnostics;
+  readonly diagnostics: Quantum1DPeriodicDiagnostics | Quantum1DFixedDiagnostics;
   readonly time: number;
   readonly siteCount: number;
   readonly quantityLabel: string;
+  readonly systemLabel: string;
+  readonly boundaryLabel: string;
 }
 
 export function QuantumDiagnosticsPanel({
@@ -12,6 +15,8 @@ export function QuantumDiagnosticsPanel({
   time,
   siteCount,
   quantityLabel,
+  systemLabel,
+  boundaryLabel,
 }: QuantumDiagnosticsPanelProps): React.JSX.Element {
   return (
     <section className="diagnostics-panel">
@@ -26,11 +31,11 @@ export function QuantumDiagnosticsPanel({
       <dl className="diagnostics-grid">
         <div>
           <dt>System</dt>
-          <dd>1D circle</dd>
+          <dd>{systemLabel}</dd>
         </div>
         <div>
           <dt>Boundary</dt>
-          <dd>Periodic</dd>
+          <dd>{boundaryLabel}</dd>
         </div>
         <div>
           <dt>Mode</dt>

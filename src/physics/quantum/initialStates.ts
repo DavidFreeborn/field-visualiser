@@ -1,4 +1,4 @@
-export type PeriodicQuantumInitialPreset =
+export type Quantum1DInitialPreset =
   | 'site-localized'
   | 'gaussian-wavepacket'
   | 'selected-normal-mode'
@@ -18,7 +18,7 @@ export interface ComplexStateVector {
 }
 
 export function createQuantumInitialState(
-  preset: PeriodicQuantumInitialPreset,
+  preset: Quantum1DInitialPreset,
   options: QuantumInitialStateOptions,
 ): ComplexStateVector {
   switch (preset) {

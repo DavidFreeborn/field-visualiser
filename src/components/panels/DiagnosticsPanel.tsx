@@ -1,10 +1,13 @@
 import type { Classical1DPeriodicDiagnostics } from '../../physics/classical/classical1dPeriodic';
+import type { Classical1DFixedDiagnostics } from '../../physics/classical/classical1dFixed';
 
 interface DiagnosticsPanelProps {
-  readonly diagnostics: Classical1DPeriodicDiagnostics;
+  readonly diagnostics: Classical1DPeriodicDiagnostics | Classical1DFixedDiagnostics;
   readonly time: number;
   readonly siteCount: number;
   readonly quantityLabel: string;
+  readonly systemLabel: string;
+  readonly boundaryLabel: string;
 }
 
 export function DiagnosticsPanel({
@@ -12,6 +15,8 @@ export function DiagnosticsPanel({
   time,
   siteCount,
   quantityLabel,
+  systemLabel,
+  boundaryLabel,
 }: DiagnosticsPanelProps): React.JSX.Element {
   return (
     <section className="diagnostics-panel">
@@ -25,11 +30,11 @@ export function DiagnosticsPanel({
       <dl className="diagnostics-grid">
         <div>
           <dt>System</dt>
-          <dd>1D circle</dd>
+          <dd>{systemLabel}</dd>
         </div>
         <div>
           <dt>Boundary</dt>
-          <dd>Periodic</dd>
+          <dd>{boundaryLabel}</dd>
         </div>
         <div>
           <dt>Mode</dt>

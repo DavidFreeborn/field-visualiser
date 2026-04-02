@@ -1,4 +1,4 @@
-import { applyPeriodicLaplacian1D } from '../../physics/core/operators';
+import { applyDirichletLaplacian1D, applyPeriodicLaplacian1D } from '../../physics/core/operators';
 
 describe('applyPeriodicLaplacian1D', () => {
   it('annihilates a constant field', () => {
@@ -21,5 +21,13 @@ describe('applyPeriodicLaplacian1D', () => {
     for (let index = 0; index < siteCount; index += 1) {
       expect(laplacian[index]).toBeCloseTo(eigenvalue * field[index], 10);
     }
+  });
+});
+
+describe('applyDirichletLaplacian1D', () => {
+  it('keeps the boundary accelerations fixed at zero', () => {
+    const field = new Float64Array([0, 1, 2, 3, 0]);
+
+    expect(Array.from(applyDirichletLaplacian1D(field, 1))).toEqual([0, 0, 0, -4, 0]);
   });
 });

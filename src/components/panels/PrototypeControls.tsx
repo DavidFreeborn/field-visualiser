@@ -2,19 +2,23 @@ import type {
   Classical1DPeriodicConfig,
   Classical1DPeriodicQuantity,
 } from '../../physics/classical/classical1dPeriodic';
-import type { PeriodicClassicalInitialPreset } from '../../physics/classical/initialConditions';
+import type { Classical1DFixedConfig } from '../../physics/classical/classical1dFixed';
+import type { Classical1DInitialPreset } from '../../physics/classical/initialConditions';
 import { ModeSwitch, type AppMode } from './ModeSwitch';
+import { GeometrySwitch, type Geometry1D } from './GeometrySwitch';
 
 interface PrototypeControlsProps {
   readonly mode: AppMode;
-  readonly config: Classical1DPeriodicConfig;
+  readonly geometry: Geometry1D;
+  readonly config: Classical1DPeriodicConfig | Classical1DFixedConfig;
   readonly quantity: Classical1DPeriodicQuantity;
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
   readonly showSprings: boolean;
   readonly onModeChange: (mode: AppMode) => void;
-  readonly onConfigChange: (nextConfig: Classical1DPeriodicConfig) => void;
+  readonly onGeometryChange: (geometry: Geometry1D) => void;
+  readonly onConfigChange: (nextConfig: Classical1DPeriodicConfig | Classical1DFixedConfig) => void;
   readonly onQuantityChange: (quantity: Classical1DPeriodicQuantity) => void;
   readonly onPlayingChange: (playing: boolean) => void;
   readonly onReset: () => void;
@@ -26,15 +30,17 @@ interface PrototypeControlsProps {
 
 const resolutionOptions = [32, 64, 128, 256] as const;
 
-const initialPresetLabels: Record<PeriodicClassicalInitialPreset, string> = {
+const initialPresetLabels: Record<Classical1DInitialPreset, string> = {
   'gaussian-displacement': 'Gaussian displacement',
   'gaussian-velocity': 'Gaussian velocity',
   'single-site-displacement': 'Single-site displacement',
+  'standing-mode-1': 'Standing mode n = 1',
   'standing-mode-2': 'Standing mode n = 2',
 };
 
 export function PrototypeControls({
   mode,
+  geometry,
   config,
   quantity,
   playing,
@@ -42,6 +48,7 @@ export function PrototypeControls({
   showLattice,
   showSprings,
   onModeChange,
+  onGeometryChange,
   onConfigChange,
   onQuantityChange,
   onPlayingChange,
@@ -56,11 +63,12 @@ export function PrototypeControls({
       <div className="control-header">
         <div>
           <p className="eyebrow">Phase 2 Prototype</p>
-          <h2>1D periodic classical lattice</h2>
+          <h2>{geometry === 'periodic-circle' ? '1D periodic classical lattice' : '1D fixed-end classical lattice'}</h2>
         </div>
         <p className="control-note">
-          Symplectic time stepping on a nearest-neighbour periodic chain. This
-          is the first validated system before broader generalisation.
+          {geometry === 'periodic-circle'
+            ? 'Symplectic time stepping on a nearest-neighbour periodic chain.'
+            : 'Symplectic time stepping on a nearest-neighbour chain with Dirichlet endpoints clamped to zero.'}
         </p>
       </div>
 
@@ -70,6 +78,11 @@ export function PrototypeControls({
           onModeChange={onModeChange}
         />
 
+        <GeometrySwitch
+          geometry={geometry}
+          onGeometryChange={onGeometryChange}
+        />
+
         <label>
           <span>Initial condition</span>
           <select
@@ -77,7 +90,7 @@ export function PrototypeControls({
             onChange={(event) =>
               onConfigChange({
                 ...config,
-                initialPreset: event.target.value as PeriodicClassicalInitialPreset,
+                initialPreset: event.target.value as Classical1DInitialPreset,
               })
             }
           >

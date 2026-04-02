@@ -9,9 +9,9 @@ export function SimulationShell({ children }: SimulationShellProps): React.JSX.E
         <p className="eyebrow">Field Visualiser</p>
         <h1>Periodic lattice visualisation with classical and one-particle views.</h1>
         <p className="lead">
-          The current scope is still deliberately narrow: 1D periodic only,
-          with a conservative classical chain and a free-field one-particle
-          quantum pedagogical mode built on the same lattice.
+          The current scope is still deliberately narrow: 1D only, with both
+          periodic-circle and fixed-end interval geometries, each available in
+          classical and free-field one-particle forms.
         </p>
       </section>
 
@@ -46,9 +46,9 @@ export function SimulationShell({ children }: SimulationShellProps): React.JSX.E
         <div className="panel-header">
           <h2>Scientific scope</h2>
           <p>
-            Current implementation: periodic 1D classical and periodic 1D
-            free-field one-particle only. Fixed boundaries and 2D systems remain
-            out of scope for this phase.
+            Current implementation: 1D periodic circle and 1D fixed-end
+            interval, each in classical and free-field one-particle form. 2D
+            systems remain out of scope for this phase.
           </p>
         </div>
         <p className="lead compact">

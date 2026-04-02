@@ -8,6 +8,7 @@ const baseConfig: Classical1DPeriodicConfig = {
   waveSpeed: 1,
   domainLength: 1,
   amplitude: 0.5,
+  initialCenter: 0.5,
   gaussianWidth: 0.06,
   initialPreset: 'standing-mode-2',
 };
@@ -98,6 +99,7 @@ describe('Classical1DPeriodicEngine', () => {
       waveSpeed: 1,
       domainLength: 1,
       amplitude: 0.75,
+      initialCenter: 0.5,
       gaussianWidth: 0.06,
       initialPreset: 'gaussian-displacement',
     });

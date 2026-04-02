@@ -7,14 +7,27 @@ import type {
   Quantum1DPeriodicQuantity,
   Quantum1DPeriodicSnapshot,
 } from '../../physics/quantum/quantum1dPeriodic';
+import type {
+  Quantum1DFixedQuantity,
+  Quantum1DFixedSnapshot,
+} from '../../physics/quantum/quantum1dFixed';
+import type { Classical1DFixedQuantity, Classical1DFixedSnapshot } from '../../physics/classical/classical1dFixed';
 import {
   PeriodicClassicalFieldRenderer,
   type PeriodicClassicalFieldRendererOptions,
 } from '../../rendering/pixi/PeriodicClassicalFieldRenderer';
 
 interface PrototypeCanvasProps {
-  readonly snapshot: Classical1DPeriodicSnapshot | Quantum1DPeriodicSnapshot;
-  readonly quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity;
+  readonly snapshot:
+    | Classical1DPeriodicSnapshot
+    | Classical1DFixedSnapshot
+    | Quantum1DPeriodicSnapshot
+    | Quantum1DFixedSnapshot;
+  readonly quantity:
+    | Classical1DPeriodicQuantity
+    | Classical1DFixedQuantity
+    | Quantum1DPeriodicQuantity
+    | Quantum1DFixedQuantity;
   readonly showLattice: boolean;
   readonly showSprings: boolean;
 }
@@ -89,10 +102,11 @@ export function PrototypeCanvas({
       />
       <div className="visual-caption">
         <p>
-          This 1D circle is rendered as an unwrapped periodic line: the left and
-          right edges are adjacent lattice sites on the same ring. Signed
-          quantities use a restrained blue-white-red map; probability density
-          and other unsigned quantities use a red sequential map.
+          {snapshot.boundaryCondition === 'periodic'
+            ? 'This 1D circle is rendered as an unwrapped periodic line: the left and right edges are adjacent lattice sites on the same ring.'
+            : 'This 1D interval has fixed-end Dirichlet boundaries: the two endpoint sites remain clamped to zero.'}{' '}
+          Signed quantities use a restrained blue-white-red map; probability density and
+          other unsigned quantities use a red sequential map.
         </p>
       </div>
     </section>

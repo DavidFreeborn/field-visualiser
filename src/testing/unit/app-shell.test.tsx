@@ -20,6 +20,7 @@ describe('App', () => {
 
     expect(screen.getByText(/1d periodic classical lattice/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Classical field')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Periodic circle')).toBeInTheDocument();
   });
 
   it('switches to the quantum one-particle controls', async () => {
@@ -36,5 +37,16 @@ describe('App', () => {
       screen.getByRole('heading', { name: /1d periodic free-field one-particle mode/i }),
     ).toBeInTheDocument();
     expect(screen.getByDisplayValue('Probability density')).toBeInTheDocument();
+  });
+
+  it('switches to the fixed-end interval controls', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'fixed-interval');
+
+    expect(screen.getByText(/1d fixed-end classical lattice/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Fixed-end interval')).toBeInTheDocument();
   });
 });

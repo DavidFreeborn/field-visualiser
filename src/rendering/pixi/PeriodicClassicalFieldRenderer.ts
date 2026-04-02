@@ -4,18 +4,34 @@ import type {
   Classical1DPeriodicSnapshot,
 } from '../../physics/classical/classical1dPeriodic';
 import type {
+  Classical1DFixedQuantity,
+  Classical1DFixedSnapshot,
+} from '../../physics/classical/classical1dFixed';
+import type {
   Quantum1DPeriodicQuantity,
   Quantum1DPeriodicSnapshot,
 } from '../../physics/quantum/quantum1dPeriodic';
+import type {
+  Quantum1DFixedQuantity,
+  Quantum1DFixedSnapshot,
+} from '../../physics/quantum/quantum1dFixed';
 import { hexToNumber, mapDensityToSequentialColor, mapSignedValueToDivergingColor } from '../colorMaps';
 
 export interface PeriodicClassicalFieldRendererOptions {
   readonly showLattice: boolean;
   readonly showSprings: boolean;
-  readonly quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity;
+  readonly quantity:
+    | Classical1DPeriodicQuantity
+    | Classical1DFixedQuantity
+    | Quantum1DPeriodicQuantity
+    | Quantum1DFixedQuantity;
 }
 
-type Periodic1DSnapshot = Classical1DPeriodicSnapshot | Quantum1DPeriodicSnapshot;
+type Periodic1DSnapshot =
+  | Classical1DPeriodicSnapshot
+  | Classical1DFixedSnapshot
+  | Quantum1DPeriodicSnapshot
+  | Quantum1DFixedSnapshot;
 
 const PADDING_X = 28;
 const PADDING_Y = 30;
@@ -109,7 +125,11 @@ export class PeriodicClassicalFieldRenderer {
           this.masses.circle(x, y, 3.2).fill({ color, alpha: 0.95 });
         }
 
-        if (options.showSprings && snapshot.kind === 'classical-1d-periodic' && index < values.length - 1) {
+        if (
+          options.showSprings &&
+          (snapshot.kind === 'classical-1d-periodic' || snapshot.kind === 'classical-1d-fixed') &&
+          index < values.length - 1
+        ) {
           const nextX = PADDING_X + (innerWidth * (index + 1)) / Math.max(1, values.length - 1);
           const nextY =
             baseline - (values[index + 1] / maxMagnitude) * innerHeight * 0.42;
@@ -144,9 +164,13 @@ export class PeriodicClassicalFieldRenderer {
 
 function getDisplayedValues(
   snapshot: Periodic1DSnapshot,
-  quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity,
+  quantity:
+    | Classical1DPeriodicQuantity
+    | Classical1DFixedQuantity
+    | Quantum1DPeriodicQuantity
+    | Quantum1DFixedQuantity,
 ): Float64Array {
-  if (snapshot.kind === 'classical-1d-periodic') {
+  if (snapshot.kind === 'classical-1d-periodic' || snapshot.kind === 'classical-1d-fixed') {
     switch (quantity) {
       case 'displacement':
         return snapshot.displacement;
@@ -174,7 +198,11 @@ function getDisplayedValues(
 }
 
 function usesSequentialMap(
-  quantity: Classical1DPeriodicQuantity | Quantum1DPeriodicQuantity,
+  quantity:
+    | Classical1DPeriodicQuantity
+    | Classical1DFixedQuantity
+    | Quantum1DPeriodicQuantity
+    | Quantum1DFixedQuantity,
 ): boolean {
   return quantity === 'energy-density' || quantity === 'probability-density' || quantity === 'magnitude';
 }
