@@ -1,10 +1,14 @@
 import type { Classical1DPeriodicDiagnostics } from '../../physics/classical/classical1dPeriodic';
 import type { Classical1DFixedDiagnostics } from '../../physics/classical/classical1dFixed';
+import type { Classical2DDiagnostics } from '../../physics/classical/classical2d';
 
 interface DiagnosticsPanelProps {
-  readonly diagnostics: Classical1DPeriodicDiagnostics | Classical1DFixedDiagnostics;
+  readonly diagnostics:
+    | Classical1DPeriodicDiagnostics
+    | Classical1DFixedDiagnostics
+    | Classical2DDiagnostics;
   readonly time: number;
-  readonly siteCount: number;
+  readonly resolutionLabel: string;
   readonly quantityLabel: string;
   readonly systemLabel: string;
   readonly boundaryLabel: string;
@@ -13,7 +17,7 @@ interface DiagnosticsPanelProps {
 export function DiagnosticsPanel({
   diagnostics,
   time,
-  siteCount,
+  resolutionLabel,
   quantityLabel,
   systemLabel,
   boundaryLabel,
@@ -23,8 +27,8 @@ export function DiagnosticsPanel({
       <div className="diagnostics-header">
         <h2>Diagnostics</h2>
         <p>
-          Conservative periodic chain in dimensionless units. Total energy is the
-          spatial integral of the displayed local energy density.
+          Conservative lattice evolution in dimensionless units. Total energy is
+          the spatial integral of the displayed local energy density.
         </p>
       </div>
       <dl className="diagnostics-grid">
@@ -42,7 +46,7 @@ export function DiagnosticsPanel({
         </div>
         <div>
           <dt>Resolution</dt>
-          <dd>{siteCount} sites</dd>
+          <dd>{resolutionLabel}</dd>
         </div>
         <div>
           <dt>Quantity</dt>

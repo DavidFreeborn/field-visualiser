@@ -28,4 +28,44 @@ describe('Quantum1DFixedEngine', () => {
     expect(snapshot.probabilityDensity[0]).toBeCloseTo(0, 12);
     expect(snapshot.probabilityDensity[snapshot.probabilityDensity.length - 1]).toBeCloseTo(0, 12);
   });
+
+  it('evolves a selected sine mode by phase only while keeping probability density fixed', () => {
+    const modeNumber = 5;
+    const engine = new Quantum1DFixedEngine({
+      ...baseConfig,
+      initialPreset: 'selected-normal-mode',
+      modeNumber,
+    });
+
+    const initialSnapshot = engine.getSnapshot('real-part');
+    const dt = 0.173;
+    const spacing = initialSnapshot.spacing;
+    const interiorCount = baseConfig.siteCount - 2;
+    const angularFrequency =
+      (2 * baseConfig.waveSpeed * Math.sin((Math.PI * modeNumber) / (2 * (interiorCount + 1)))) /
+      spacing;
+
+    engine.step(dt);
+    const finalSnapshot = engine.getSnapshot('real-part');
+
+    const expectedPhase = -angularFrequency * dt;
+    const cosPhase = Math.cos(expectedPhase);
+    const sinPhase = Math.sin(expectedPhase);
+
+    for (let index = 0; index < initialSnapshot.amplitudeReal.length; index += 1) {
+      const expectedReal =
+        initialSnapshot.amplitudeReal[index] * cosPhase -
+        initialSnapshot.amplitudeImaginary[index] * sinPhase;
+      const expectedImaginary =
+        initialSnapshot.amplitudeReal[index] * sinPhase +
+        initialSnapshot.amplitudeImaginary[index] * cosPhase;
+
+      expect(finalSnapshot.amplitudeReal[index]).toBeCloseTo(expectedReal, 10);
+      expect(finalSnapshot.amplitudeImaginary[index]).toBeCloseTo(expectedImaginary, 10);
+      expect(finalSnapshot.probabilityDensity[index]).toBeCloseTo(
+        initialSnapshot.probabilityDensity[index],
+        10,
+      );
+    }
+  });
 });

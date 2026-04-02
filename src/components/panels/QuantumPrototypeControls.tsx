@@ -79,7 +79,8 @@ export function QuantumPrototypeControls({
 
         <GeometrySwitch
           geometry={geometry}
-          onGeometryChange={onGeometryChange}
+          mode={mode}
+          onGeometryChange={(next) => onGeometryChange(next as Geometry1D)}
         />
 
         <label>

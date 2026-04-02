@@ -8,6 +8,10 @@ import type {
   Classical1DFixedSnapshot,
 } from '../../physics/classical/classical1dFixed';
 import type {
+  Classical2DQuantity,
+  Classical2DSnapshot,
+} from '../../physics/classical/classical2d';
+import type {
   Quantum1DPeriodicQuantity,
   Quantum1DPeriodicSnapshot,
 } from '../../physics/quantum/quantum1dPeriodic';
@@ -23,6 +27,7 @@ export interface PeriodicClassicalFieldRendererOptions {
   readonly quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
+    | Classical2DQuantity
     | Quantum1DPeriodicQuantity
     | Quantum1DFixedQuantity;
 }
@@ -30,6 +35,7 @@ export interface PeriodicClassicalFieldRendererOptions {
 type Periodic1DSnapshot =
   | Classical1DPeriodicSnapshot
   | Classical1DFixedSnapshot
+  | Classical2DSnapshot
   | Quantum1DPeriodicSnapshot
   | Quantum1DFixedSnapshot;
 
@@ -83,6 +89,12 @@ export class PeriodicClassicalFieldRenderer {
 
     const width = this.host.clientWidth;
     const height = this.host.clientHeight;
+    if (snapshot.kind === 'classical-2d') {
+      this.render2D(snapshot, width, height, options);
+      this.app.render();
+      return;
+    }
+
     const baseline = height / 2;
     const innerWidth = Math.max(1, width - 2 * PADDING_X);
     const innerHeight = Math.max(1, height - 2 * PADDING_Y);
@@ -160,6 +172,52 @@ export class PeriodicClassicalFieldRenderer {
     this.app.destroy(undefined, { children: true });
     this.initialised = false;
   }
+
+  private render2D(
+    snapshot: Classical2DSnapshot,
+    width: number,
+    height: number,
+    options: PeriodicClassicalFieldRendererOptions,
+  ): void {
+    const values = getDisplayedValues(snapshot, options.quantity);
+    const maxMagnitude = getMaxMagnitude(values) || 1;
+    const useSequentialMap = usesSequentialMap(options.quantity);
+    const cols = snapshot.width;
+    const rows = snapshot.height;
+    const innerWidth = Math.max(1, width - 2 * PADDING_X);
+    const innerHeight = Math.max(1, height - 2 * PADDING_Y);
+    const cellWidth = innerWidth / cols;
+    const cellHeight = innerHeight / rows;
+
+    this.background.clear();
+    this.background
+      .roundRect(0, 0, width, height, 24)
+      .fill({ color: 0xfcfaf7, alpha: 0.92 })
+      .stroke({ width: 1, color: 0xd8d1c8, alpha: 1 });
+
+    this.guides.clear();
+    this.waveform.clear();
+    this.bonds.clear();
+    this.masses.clear();
+
+    for (let y = 0; y < rows; y += 1) {
+      for (let x = 0; x < cols; x += 1) {
+        const index = y * cols + x;
+        const color = useSequentialMap
+          ? hexToNumber(mapDensityToSequentialColor(values[index], maxMagnitude))
+          : hexToNumber(mapSignedValueToDivergingColor(values[index], maxMagnitude));
+        this.waveform
+          .rect(PADDING_X + x * cellWidth, PADDING_Y + y * cellHeight, cellWidth + 0.5, cellHeight + 0.5)
+          .fill({ color, alpha: 0.98 });
+
+        if (options.showLattice) {
+          this.masses
+            .circle(PADDING_X + (x + 0.5) * cellWidth, PADDING_Y + (y + 0.5) * cellHeight, 1.1)
+            .fill({ color: 0x17202a, alpha: 0.2 });
+        }
+      }
+    }
+  }
 }
 
 function getDisplayedValues(
@@ -167,9 +225,23 @@ function getDisplayedValues(
   quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
+    | Classical2DQuantity
     | Quantum1DPeriodicQuantity
     | Quantum1DFixedQuantity,
 ): Float64Array {
+  if (snapshot.kind === 'classical-2d') {
+    switch (quantity) {
+      case 'displacement':
+        return snapshot.displacement;
+      case 'velocity':
+        return snapshot.velocity;
+      case 'energy-density':
+        return snapshot.localEnergyDensity;
+      default:
+        return snapshot.displacement;
+    }
+  }
+
   if (snapshot.kind === 'classical-1d-periodic' || snapshot.kind === 'classical-1d-fixed') {
     switch (quantity) {
       case 'displacement':
@@ -201,6 +273,7 @@ function usesSequentialMap(
   quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
+    | Classical2DQuantity
     | Quantum1DPeriodicQuantity
     | Quantum1DFixedQuantity,
 ): boolean {

@@ -9,6 +9,12 @@ test('loads the application shell', async ({ page }) => {
     }),
   ).toBeVisible();
 
+  await page.getByLabel('Geometry').selectOption('square-fixed');
+  await expect(page.getByText(/2d square classical membrane/i)).toBeVisible();
+  await expect(
+    page.getByText(/fixed zero boundaries on all edges/i),
+  ).toBeVisible();
+
   await page.getByLabel('Geometry').selectOption('fixed-interval');
   await expect(page.getByText(/1d fixed-end classical lattice/i)).toBeVisible();
 

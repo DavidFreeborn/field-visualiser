@@ -9,9 +9,10 @@ export function SimulationShell({ children }: SimulationShellProps): React.JSX.E
         <p className="eyebrow">Field Visualiser</p>
         <h1>Periodic lattice visualisation with classical and one-particle views.</h1>
         <p className="lead">
-          The current scope is still deliberately narrow: 1D only, with both
-          periodic-circle and fixed-end interval geometries, each available in
-          classical and free-field one-particle forms.
+          The current scope is still deliberately phased: 1D periodic and
+          fixed-end systems remain available in classical and free-field
+          one-particle forms, while this phase adds 2D classical square and
+          torus lattices only.
         </p>
       </section>
 
@@ -47,15 +48,16 @@ export function SimulationShell({ children }: SimulationShellProps): React.JSX.E
           <h2>Scientific scope</h2>
           <p>
             Current implementation: 1D periodic circle and 1D fixed-end
-            interval, each in classical and free-field one-particle form. 2D
-            systems remain out of scope for this phase.
+            interval in classical and free-field one-particle form, plus 2D
+            classical square and torus lattices. 2D quantum systems remain out
+            of scope for this phase.
           </p>
         </div>
         <p className="lead compact">
           This prototype does not attempt interacting quantum field theory and
           does not fabricate effects for visual appeal. The quantum mode evolves
-          a one-particle amplitude in the periodic lattice Hilbert space and
-          displays probability density, not a literal classical particle blob.
+          a one-particle amplitude on the 1D lattice Hilbert space and displays
+          probability density, not a literal classical particle blob.
         </p>
       </section>
     </main>

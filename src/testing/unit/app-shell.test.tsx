@@ -49,4 +49,32 @@ describe('App', () => {
     expect(screen.getByText(/1d fixed-end classical lattice/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Fixed-end interval')).toBeInTheDocument();
   });
+
+  it('switches to the 2D square classical controls', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'square-fixed');
+
+    expect(screen.getByText(/2d square classical membrane/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('2D square, fixed edges')).toBeInTheDocument();
+  });
+
+  it('returns to a 1D quantum geometry if quantum mode is selected from 2D classical', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'torus-periodic');
+    await user.selectOptions(
+      screen.getByLabelText(/interpretation mode/i),
+      'quantum-one-particle',
+    );
+
+    expect(
+      screen.getByRole('heading', { name: /1d periodic free-field one-particle mode/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Periodic circle')).toBeInTheDocument();
+  });
 });

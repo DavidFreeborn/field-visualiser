@@ -12,6 +12,7 @@ import type {
   Quantum1DFixedSnapshot,
 } from '../../physics/quantum/quantum1dFixed';
 import type { Classical1DFixedQuantity, Classical1DFixedSnapshot } from '../../physics/classical/classical1dFixed';
+import type { Classical2DQuantity, Classical2DSnapshot } from '../../physics/classical/classical2d';
 import {
   PeriodicClassicalFieldRenderer,
   type PeriodicClassicalFieldRendererOptions,
@@ -21,11 +22,13 @@ interface PrototypeCanvasProps {
   readonly snapshot:
     | Classical1DPeriodicSnapshot
     | Classical1DFixedSnapshot
+    | Classical2DSnapshot
     | Quantum1DPeriodicSnapshot
     | Quantum1DFixedSnapshot;
   readonly quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
+    | Classical2DQuantity
     | Quantum1DPeriodicQuantity
     | Quantum1DFixedQuantity;
   readonly showLattice: boolean;
@@ -95,16 +98,20 @@ export function PrototypeCanvas({
   return (
     <section className="visual-panel">
       <div
-        aria-label="1D periodic classical field visualisation"
+        aria-label="Field visualisation canvas"
         className="visual-canvas"
         ref={hostRef}
         role="img"
       />
       <div className="visual-caption">
         <p>
-          {snapshot.boundaryCondition === 'periodic'
-            ? 'This 1D circle is rendered as an unwrapped periodic line: the left and right edges are adjacent lattice sites on the same ring.'
-            : 'This 1D interval has fixed-end Dirichlet boundaries: the two endpoint sites remain clamped to zero.'}{' '}
+          {snapshot.kind === 'classical-2d'
+            ? snapshot.geometry === 'torus-periodic'
+              ? 'This 2D torus is displayed as a flat periodic square with opposite edges identified.'
+              : 'This 2D square has fixed zero boundaries on all four edges.'
+            : snapshot.boundaryCondition === 'periodic'
+              ? 'This 1D circle is rendered as an unwrapped periodic line: the left and right edges are adjacent lattice sites on the same ring.'
+              : 'This 1D interval has fixed-end Dirichlet boundaries: the two endpoint sites remain clamped to zero.'}{' '}
           Signed quantities use a restrained blue-white-red map; probability density and
           other unsigned quantities use a red sequential map.
         </p>
