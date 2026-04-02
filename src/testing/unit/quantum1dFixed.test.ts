@@ -68,4 +68,25 @@ describe('Quantum1DFixedEngine', () => {
       );
     }
   });
+
+  it('matches the locked baseline for a representative fixed-end one-particle evolution', () => {
+    const engine = new Quantum1DFixedEngine(baseConfig);
+    const dt = engine.getDiagnostics().recommendedDt;
+
+    for (let index = 0; index < 20; index += 1) {
+      engine.step(dt);
+    }
+
+    const snapshot = engine.getSnapshot();
+    const diagnostics = engine.getDiagnostics();
+
+    expect(snapshot.time).toBeCloseTo(0.02045461736687728, 12);
+    expect(snapshot.probabilityDensity[1]).toBeCloseTo(2.629490886900237e-9, 12);
+    expect(snapshot.probabilityDensity[32]).toBeCloseTo(0.0000063527300083002975, 12);
+    expect(snapshot.probabilityDensity[64]).toBeCloseTo(0.05289070341576378, 12);
+    expect(snapshot.amplitudeReal[32]).toBeCloseTo(0.0017328455489409812, 12);
+    expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(0.001830294050642062, 12);
+    expect(snapshot.totalNorm).toBeCloseTo(1, 12);
+    expect(diagnostics.normError).toBeCloseTo(1.1102230246251565e-16, 18);
+  });
 });

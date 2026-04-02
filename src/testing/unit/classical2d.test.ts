@@ -151,6 +151,29 @@ describe('Classical2DEngine', () => {
     );
     expect(finalSnapshot.displacement[flattenIndex2D(0, 0, initialSnapshot.width)]).toBe(0);
   });
+
+  it('matches the locked baseline for a representative 2D torus classical evolution', () => {
+    const engine = new Classical2DEngine(torusConfig);
+    const dt = engine.getDiagnostics().recommendedDt;
+
+    for (let index = 0; index < 18; index += 1) {
+      engine.step(dt);
+    }
+
+    const snapshot = engine.getSnapshot();
+    const diagnostics = engine.getDiagnostics();
+    const centerIndex = flattenIndex2D(12, 12, snapshot.width);
+    const xIndex = flattenIndex2D(6, 12, snapshot.width);
+    const yIndex = flattenIndex2D(12, 6, snapshot.width);
+
+    expect(snapshot.time).toBeCloseTo(0.10606601717798217, 12);
+    expect(snapshot.displacement[centerIndex]).toBeCloseTo(-0.005826007200347781, 12);
+    expect(snapshot.displacement[xIndex]).toBeCloseTo(0.08024081583100937, 12);
+    expect(snapshot.displacement[yIndex]).toBeCloseTo(0.08024081583100938, 12);
+    expect(snapshot.velocity[centerIndex]).toBeCloseTo(-7.374710521628247, 12);
+    expect(snapshot.totalEnergy).toBeCloseTo(0.9675196335652549, 12);
+    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(0.001619956805519265, 12);
+  });
 });
 
 function engineModeSpeed(config: Classical2DConfig): number {

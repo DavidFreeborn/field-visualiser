@@ -9,8 +9,11 @@ if (rootElement === null) {
   throw new Error('Expected #root element to exist.');
 }
 
+const searchParams = new URLSearchParams(window.location.search);
+const embedded = searchParams.get('embed') === '1';
+
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <App embedded={embedded} />
   </React.StrictMode>,
 );

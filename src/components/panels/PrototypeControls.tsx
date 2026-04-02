@@ -28,7 +28,7 @@ interface PrototypeControlsProps {
   readonly onShowSpringsChange: (showSprings: boolean) => void;
 }
 
-const resolutionOptions = [32, 64, 128, 256] as const;
+const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048] as const;
 
 const initialPresetLabels: Record<Classical1DInitialPreset, string> = {
   'gaussian-displacement': 'Gaussian displacement',
@@ -63,12 +63,11 @@ export function PrototypeControls({
       <div className="control-header">
         <div>
           <p className="eyebrow">Phase 2 Prototype</p>
-          <h2>{geometry === 'periodic-circle' ? '1D periodic classical lattice' : '1D fixed-end classical lattice'}</h2>
         </div>
         <p className="control-note">
           {geometry === 'periodic-circle'
-            ? 'Symplectic time stepping on a nearest-neighbour periodic chain.'
-            : 'Symplectic time stepping on a nearest-neighbour chain with Dirichlet endpoints clamped to zero.'}
+            ? 'Classical nearest-neighbour ring with periodic wraparound, shown directly as a circle.'
+            : 'Classical nearest-neighbour line with fixed zero endpoints.'}
         </p>
       </div>
 
@@ -107,7 +106,7 @@ export function PrototypeControls({
         </label>
 
         <label>
-          <span>Resolution</span>
+          <span>Oscillator density</span>
           <select
             value={config.siteCount}
             onChange={(event) =>
@@ -122,7 +121,7 @@ export function PrototypeControls({
                 key={siteCount}
                 value={siteCount}
               >
-                {siteCount} sites
+                {siteCount === 2048 ? `Almost continuum (${siteCount} oscillators)` : `${siteCount} oscillators`}
               </option>
             ))}
           </select>

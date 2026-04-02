@@ -5,19 +5,57 @@ test('loads the application shell', async ({ page }) => {
 
   await expect(
     page.getByRole('heading', {
-      name: /periodic lattice visualisation with classical and one-particle views/i,
+      name: /visualizing fields/i,
     }),
   ).toBeVisible();
 
   await page.getByLabel('Geometry').selectOption('square-fixed');
-  await expect(page.getByText(/2d square classical membrane/i)).toBeVisible();
   await expect(
     page.getByText(/fixed zero boundaries on all edges/i),
   ).toBeVisible();
 
   await page.getByLabel('Geometry').selectOption('fixed-interval');
-  await expect(page.getByText(/1d fixed-end classical lattice/i)).toBeVisible();
+  await expect(page.getByText(/classical nearest-neighbour line with fixed zero endpoints/i)).toBeVisible();
 
   await page.getByLabel(/interpretation mode/i).selectOption('quantum-one-particle');
-  await expect(page.getByText(/free-field one-particle pedagogical/i)).toBeVisible();
+  await expect(page.getByText(/free-field one-particle evolution on a fixed-end interval/i)).toBeVisible();
+
+  await page.getByLabel('Geometry').selectOption('torus-periodic');
+  await expect(
+    page.getByText(/exact separable phase evolution in a 2d periodic normal-mode basis/i),
+  ).toBeVisible();
+});
+
+test('restores a shared scene from the URL state', async ({ page }) => {
+  const sharedScene = encodeURIComponent(
+    JSON.stringify({
+      v: 1,
+      mode: 'quantum-one-particle',
+      geometry: 'fixed-interval',
+      quantity: 'probability-density',
+      playing: false,
+      speed: 1.2,
+      showLattice: true,
+      showSprings: false,
+      config: {
+        siteCount: 129,
+        waveSpeed: 1,
+        domainLength: 1,
+        initialCenter: 0.5,
+        gaussianWidth: 0.08,
+        momentumWidth: 2,
+        modeNumber: 6,
+        initialPreset: 'selected-normal-mode',
+      },
+    }),
+  );
+
+  await page.goto(`/?scene=${sharedScene}`);
+
+  await expect(
+    page.getByText(/free-field one-particle evolution on a fixed-end interval/i),
+  ).toBeVisible();
+  await expect(page.getByLabel('Geometry')).toHaveValue('fixed-interval');
+  await expect(page.getByLabel(/interpretation mode/i)).toHaveValue('quantum-one-particle');
+  await expect(page.getByRole('button', { name: /^play$/i })).toBeVisible();
 });

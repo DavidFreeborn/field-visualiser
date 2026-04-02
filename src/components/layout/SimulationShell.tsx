@@ -1,65 +1,21 @@
 interface SimulationShellProps {
   readonly children: React.ReactNode;
+  readonly embedded?: boolean;
 }
 
-export function SimulationShell({ children }: SimulationShellProps): React.JSX.Element {
+export function SimulationShell({
+  children,
+  embedded = false,
+}: SimulationShellProps): React.JSX.Element {
   return (
-    <main className="app-shell">
-      <section className="hero-panel">
-        <p className="eyebrow">Field Visualiser</p>
-        <h1>Periodic lattice visualisation with classical and one-particle views.</h1>
-        <p className="lead">
-          The current scope is still deliberately phased: 1D periodic and
-          fixed-end systems remain available in classical and free-field
-          one-particle forms, while this phase adds 2D classical square and
-          torus lattices only.
-        </p>
-      </section>
+    <main className={`app-shell${embedded ? ' app-shell-embedded' : ''}`}>
+      {embedded ? null : (
+        <section className="hero-panel">
+          <h1>Visualizing Fields</h1>
+        </section>
+      )}
 
       <div className="prototype-grid">{children}</div>
-
-      <section
-        aria-labelledby="architecture-title"
-        className="content-panel architecture-grid"
-      >
-        <div className="panel-header">
-          <h2 id="architecture-title">Module boundaries</h2>
-          <p>
-            Physics remains deterministic and DOM-free; rendering remains
-            display-only; React coordinates presets, controls, and diagnostics.
-          </p>
-        </div>
-        <article>
-          <h3>physics-core</h3>
-          <p>Pure TypeScript simulation engines, operators, invariants, and typed configuration.</p>
-        </article>
-        <article>
-          <h3>render-core</h3>
-          <p>Read-only visual transforms and Pixi-facing drawing adapters.</p>
-        </article>
-        <article>
-          <h3>ui-app</h3>
-          <p>Controls, presets, help panels, diagnostics, and serialisable scene state.</p>
-        </article>
-      </section>
-
-      <section className="content-panel caveat-panel">
-        <div className="panel-header">
-          <h2>Scientific scope</h2>
-          <p>
-            Current implementation: 1D periodic circle and 1D fixed-end
-            interval in classical and free-field one-particle form, plus 2D
-            classical square and torus lattices. 2D quantum systems remain out
-            of scope for this phase.
-          </p>
-        </div>
-        <p className="lead compact">
-          This prototype does not attempt interacting quantum field theory and
-          does not fabricate effects for visual appeal. The quantum mode evolves
-          a one-particle amplitude on the 1D lattice Hilbert space and displays
-          probability density, not a literal classical particle blob.
-        </p>
-      </section>
     </main>
   );
 }

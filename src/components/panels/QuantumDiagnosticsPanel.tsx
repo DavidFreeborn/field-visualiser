@@ -1,10 +1,16 @@
 import type { Quantum1DPeriodicDiagnostics } from '../../physics/quantum/quantum1dPeriodic';
 import type { Quantum1DFixedDiagnostics } from '../../physics/quantum/quantum1dFixed';
+import type { Quantum2DPeriodicDiagnostics } from '../../physics/quantum/quantum2dPeriodic';
+import type { Quantum2DFixedDiagnostics } from '../../physics/quantum/quantum2dFixed';
 
 interface QuantumDiagnosticsPanelProps {
-  readonly diagnostics: Quantum1DPeriodicDiagnostics | Quantum1DFixedDiagnostics;
+  readonly diagnostics:
+    | Quantum1DPeriodicDiagnostics
+    | Quantum1DFixedDiagnostics
+    | Quantum2DPeriodicDiagnostics
+    | Quantum2DFixedDiagnostics;
   readonly time: number;
-  readonly siteCount: number;
+  readonly resolutionLabel: string;
   readonly quantityLabel: string;
   readonly systemLabel: string;
   readonly boundaryLabel: string;
@@ -13,7 +19,7 @@ interface QuantumDiagnosticsPanelProps {
 export function QuantumDiagnosticsPanel({
   diagnostics,
   time,
-  siteCount,
+  resolutionLabel,
   quantityLabel,
   systemLabel,
   boundaryLabel,
@@ -23,9 +29,10 @@ export function QuantumDiagnosticsPanel({
       <div className="diagnostics-header">
         <h2>Diagnostics</h2>
         <p>
-          Free-field one-particle pedagogical visualisation on a periodic
-          lattice. The red regions show probability density, not a little
-          classical particle blob.
+          Free-field one-particle pedagogical visualisation. The red regions
+          show probability density or detector-click probability density in the
+          toy model, not a little classical particle blob. This is not
+          interacting QFT.
         </p>
       </div>
       <dl className="diagnostics-grid">
@@ -43,7 +50,7 @@ export function QuantumDiagnosticsPanel({
         </div>
         <div>
           <dt>Resolution</dt>
-          <dd>{siteCount} sites</dd>
+          <dd>{resolutionLabel}</dd>
         </div>
         <div>
           <dt>Quantity</dt>
@@ -67,7 +74,11 @@ export function QuantumDiagnosticsPanel({
         </div>
         <div>
           <dt>Interpretation</dt>
-          <dd>Probability on the unwrapped periodic domain</dd>
+          <dd>
+            {boundaryLabel === 'periodic'
+              ? 'One-particle probability on a flat periodic domain'
+              : 'One-particle probability on a fixed-edge domain'}
+          </dd>
         </div>
       </dl>
     </section>

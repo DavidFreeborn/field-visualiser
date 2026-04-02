@@ -1,7 +1,9 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { PrototypeCanvas } from '../../components/layout/PrototypeCanvas';
 import type { Classical1DPeriodicSnapshot } from '../../physics/classical/classical1dPeriodic';
+import type { Quantum2DPeriodicSnapshot } from '../../physics/quantum/quantum2dPeriodic';
 
 const constructorSpy = vi.fn();
 const initSpy = vi.fn(() => Promise.resolve());
@@ -10,13 +12,21 @@ const destroySpy = vi.fn();
 
 vi.mock('../../rendering/pixi/PeriodicClassicalFieldRenderer', () => ({
   PeriodicClassicalFieldRenderer: class {
+    private readonly host: HTMLElement;
+
+    private canvas: HTMLCanvasElement | null = null;
+
     public constructor(host: HTMLElement) {
       constructorSpy(host);
-      void host;
+      this.host = host;
     }
 
     public init(): Promise<void> {
-      return initSpy();
+      return initSpy().then(() => {
+        this.canvas = document.createElement('canvas');
+        this.canvas.dataset.testid = 'mock-renderer-canvas';
+        this.host.appendChild(this.canvas);
+      });
     }
 
     public render(
@@ -27,6 +37,8 @@ vi.mock('../../rendering/pixi/PeriodicClassicalFieldRenderer', () => ({
     }
 
     public destroy(): void {
+      this.canvas?.remove();
+      this.canvas = null;
       destroySpy();
     }
   },
@@ -51,6 +63,42 @@ const snapshot: Classical1DPeriodicSnapshot = {
 };
 
 describe('PrototypeCanvas', () => {
+  it('shows a loading state until the lazy renderer is ready', async () => {
+    constructorSpy.mockClear();
+    renderSpy.mockClear();
+    initSpy.mockClear();
+    destroySpy.mockClear();
+
+    let resolveInit: (() => void) | undefined;
+    initSpy.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveInit = resolve;
+        }),
+    );
+
+    render(
+      <PrototypeCanvas
+        quantity="displacement"
+        showLattice
+        showSprings
+        snapshot={snapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(initSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(/loading renderer/i);
+
+    resolveInit?.();
+
+    await waitFor(() => {
+      expect(renderSpy).toHaveBeenCalled();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
   it('renders the first frame after renderer initialization', async () => {
     constructorSpy.mockClear();
     renderSpy.mockClear();
@@ -118,5 +166,143 @@ describe('PrototypeCanvas', () => {
     expect(constructorSpy).toHaveBeenCalledTimes(1);
     expect(initSpy).toHaveBeenCalledTimes(1);
     expect(destroySpy).not.toHaveBeenCalled();
+  });
+
+  it('reuses the renderer for 2D quantum snapshot updates', async () => {
+    constructorSpy.mockClear();
+    renderSpy.mockClear();
+    initSpy.mockClear();
+    destroySpy.mockClear();
+
+    const quantumSnapshot: Quantum2DPeriodicSnapshot = {
+      kind: 'quantum-2d-periodic',
+      time: 0,
+      systemLabel: '2D torus',
+      boundaryCondition: 'periodic',
+      modeLabel: 'free-field one-particle',
+      quantity: 'probability-density',
+      width: 4,
+      height: 4,
+      domainLength: 1,
+      spacing: 0.25,
+      geometry: 'torus-periodic',
+      amplitudeReal: new Float64Array(16),
+      amplitudeImaginary: new Float64Array(16),
+      magnitude: new Float64Array(16),
+      probabilityDensity: new Float64Array(16),
+      modeWeights: new Float64Array(16),
+      totalNorm: 1,
+    };
+
+    const { rerender } = render(
+      <PrototypeCanvas
+        quantity="probability-density"
+        showLattice={false}
+        showSprings={false}
+        snapshot={quantumSnapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(constructorSpy).toHaveBeenCalledTimes(1);
+      expect(initSpy).toHaveBeenCalledTimes(1);
+    });
+
+    const nextSnapshot: Quantum2DPeriodicSnapshot = {
+      ...quantumSnapshot,
+      time: 0.1,
+      probabilityDensity: Float64Array.from({ length: 16 }, (_, index) => index / 16),
+    };
+
+    rerender(
+      <PrototypeCanvas
+        quantity="magnitude"
+        showLattice
+        showSprings={false}
+        snapshot={nextSnapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(renderSpy).toHaveBeenCalledWith(nextSnapshot, {
+        quantity: 'magnitude',
+        showLattice: true,
+        showSprings: false,
+      });
+    });
+
+    expect(constructorSpy).toHaveBeenCalledTimes(1);
+    expect(destroySpy).not.toHaveBeenCalled();
+  });
+
+  it('retries renderer startup cleanly after an initialization failure', async () => {
+    const user = userEvent.setup();
+    constructorSpy.mockClear();
+    renderSpy.mockClear();
+    initSpy.mockClear();
+    destroySpy.mockClear();
+    initSpy
+      .mockImplementationOnce(() => Promise.reject(new Error('init failed')))
+      .mockImplementationOnce(() => Promise.resolve());
+
+    render(
+      <PrototypeCanvas
+        quantity="displacement"
+        showLattice
+        showSprings
+        snapshot={snapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/renderer failed to load/i);
+    });
+
+    await user.click(screen.getByRole('button', { name: /retry renderer/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(renderSpy).toHaveBeenCalled();
+    });
+
+    expect(constructorSpy).toHaveBeenCalledTimes(2);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+  });
+
+  it('does not duplicate canvases across unmount and remount', async () => {
+    constructorSpy.mockClear();
+    renderSpy.mockClear();
+    initSpy.mockClear();
+    destroySpy.mockClear();
+
+    const firstRender = render(
+      <PrototypeCanvas
+        quantity="displacement"
+        showLattice
+        showSprings
+        snapshot={snapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+    });
+
+    firstRender.unmount();
+    expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(0);
+
+    render(
+      <PrototypeCanvas
+        quantity="displacement"
+        showLattice
+        showSprings
+        snapshot={snapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+    });
   });
 });

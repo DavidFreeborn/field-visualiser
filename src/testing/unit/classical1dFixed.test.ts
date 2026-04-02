@@ -80,4 +80,25 @@ describe('Classical1DFixedEngine', () => {
       );
     }
   });
+
+  it('matches the locked baseline for a representative fixed-end classical evolution', () => {
+    const engine = new Classical1DFixedEngine(baseConfig);
+    const dt = engine.getDiagnostics().recommendedDt;
+
+    for (let index = 0; index < 24; index += 1) {
+      engine.step(dt);
+    }
+
+    const snapshot = engine.getSnapshot();
+    const diagnostics = engine.getDiagnostics();
+
+    expect(snapshot.time).toBeCloseTo(0.13124999999999995, 12);
+    expect(snapshot.displacement[16]).toBeCloseTo(0.0000891458010363549, 12);
+    expect(snapshot.displacement[64]).toBeCloseTo(0.07147365254761982, 12);
+    expect(snapshot.displacement[112]).toBeCloseTo(0.0001494047108146808, 12);
+    expect(snapshot.velocity[16]).toBeCloseTo(0.006126379784747328, 12);
+    expect(snapshot.velocity[64]).toBeCloseTo(-2.5724271710175337, 12);
+    expect(snapshot.totalEnergy).toBeCloseTo(4.10778945458447, 12);
+    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(0.0013632239642547732, 12);
+  });
 });

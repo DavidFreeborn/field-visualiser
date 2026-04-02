@@ -1,24 +1,30 @@
-import { ModeSwitch, type AppMode } from './ModeSwitch';
-import { GeometrySwitch, type Geometry1D } from './GeometrySwitch';
 import type {
-  Quantum1DPeriodicConfig,
-  Quantum1DPeriodicQuantity,
-} from '../../physics/quantum/quantum1dPeriodic';
-import type { Quantum1DFixedConfig, Quantum1DFixedQuantity } from '../../physics/quantum/quantum1dFixed';
-import type { Quantum1DInitialPreset } from '../../physics/quantum/initialStates';
+  Quantum2DFixedConfig,
+  Quantum2DFixedQuantity,
+} from '../../physics/quantum/quantum2dFixed';
+import type {
+  Quantum2DPeriodicConfig,
+  Quantum2DPeriodicQuantity,
+} from '../../physics/quantum/quantum2dPeriodic';
+import type { Quantum2DInitialPreset } from '../../physics/quantum/initialStates2d';
+import { GeometrySwitch, type Geometry2D } from './GeometrySwitch';
+import { ModeSwitch, type AppMode } from './ModeSwitch';
 
-interface QuantumPrototypeControlsProps {
+type Quantum2DConfig = Quantum2DFixedConfig | Quantum2DPeriodicConfig;
+type Quantum2DQuantity = Quantum2DFixedQuantity | Quantum2DPeriodicQuantity;
+
+interface Quantum2DControlsProps {
   readonly mode: AppMode;
-  readonly geometry: Geometry1D;
-  readonly config: Quantum1DPeriodicConfig | Quantum1DFixedConfig;
-  readonly quantity: Quantum1DPeriodicQuantity | Quantum1DFixedQuantity;
+  readonly geometry: Geometry2D;
+  readonly config: Quantum2DConfig;
+  readonly quantity: Quantum2DQuantity;
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
   readonly onModeChange: (mode: AppMode) => void;
-  readonly onGeometryChange: (geometry: Geometry1D) => void;
-  readonly onConfigChange: (nextConfig: Quantum1DPeriodicConfig | Quantum1DFixedConfig) => void;
-  readonly onQuantityChange: (quantity: Quantum1DPeriodicQuantity | Quantum1DFixedQuantity) => void;
+  readonly onGeometryChange: (geometry: Geometry2D) => void;
+  readonly onConfigChange: (config: Quantum2DConfig) => void;
+  readonly onQuantityChange: (quantity: Quantum2DQuantity) => void;
   readonly onPlayingChange: (playing: boolean) => void;
   readonly onReset: () => void;
   readonly onStep: () => void;
@@ -26,16 +32,17 @@ interface QuantumPrototypeControlsProps {
   readonly onShowLatticeChange: (showLattice: boolean) => void;
 }
 
-const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048] as const;
+const torusResolutionOptions = [16, 24, 32, 40, 48, 64, 80, 96] as const;
+const squareResolutionOptions = [17, 25, 33, 41, 49, 65, 81] as const;
 
-const initialPresetLabels: Record<Quantum1DInitialPreset, string> = {
+const initialPresetLabels: Record<Quantum2DInitialPreset, string> = {
   'site-localized': 'Site-localized state',
-  'gaussian-wavepacket': 'Gaussian wavepacket',
+  'gaussian-wavepacket': 'Gaussian packet',
   'selected-normal-mode': 'Selected normal mode',
-  'counterpropagating-superposition': 'Counterpropagating superposition',
+  'split-superposition': 'Split superposition',
 };
 
-export function QuantumPrototypeControls({
+export function Quantum2DControls({
   mode,
   geometry,
   config,
@@ -52,17 +59,31 @@ export function QuantumPrototypeControls({
   onStep,
   onSpeedChange,
   onShowLatticeChange,
-}: QuantumPrototypeControlsProps): React.JSX.Element {
+}: Quantum2DControlsProps): React.JSX.Element {
+  const allowedPresets: Quantum2DInitialPreset[] =
+    geometry === 'torus-periodic'
+      ? [
+          'site-localized',
+          'gaussian-wavepacket',
+          'selected-normal-mode',
+          'split-superposition',
+        ]
+      : [
+          'site-localized',
+          'gaussian-wavepacket',
+          'selected-normal-mode',
+        ];
+  const resolutionOptions =
+    geometry === 'torus-periodic' ? torusResolutionOptions : squareResolutionOptions;
+  const modeSliderMin = geometry === 'torus-periodic' ? 0 : 1;
+
   return (
     <section className="control-panel">
       <div className="control-header">
-        <div>
-          <p className="eyebrow">Phase 3 Prototype</p>
-        </div>
         <p className="control-note">
-          {geometry === 'periodic-circle'
-            ? 'Free-field one-particle evolution on the periodic lattice Hilbert space, shown on a circular domain.'
-            : 'Free-field one-particle evolution on a fixed-end interval with zero endpoint amplitudes.'}
+          {geometry === 'torus-periodic'
+            ? 'Exact separable phase evolution in a 2D periodic normal-mode basis on a flat square domain with opposite edges identified.'
+            : 'Exact separable sine-mode phase evolution on a 2D square with fixed zero boundary amplitudes.'}
         </p>
       </div>
 
@@ -71,13 +92,11 @@ export function QuantumPrototypeControls({
           mode={mode}
           onModeChange={onModeChange}
         />
-
         <GeometrySwitch
           geometry={geometry}
           mode={mode}
-          onGeometryChange={(next) => onGeometryChange(next as Geometry1D)}
+          onGeometryChange={(next) => onGeometryChange(next as Geometry2D)}
         />
-
         <label>
           <span>Initial state</span>
           <select
@@ -85,52 +104,48 @@ export function QuantumPrototypeControls({
             onChange={(event) =>
               onConfigChange({
                 ...config,
-                initialPreset: event.target.value as Quantum1DInitialPreset,
+                initialPreset: event.target.value as Quantum2DInitialPreset,
               })
             }
           >
-            {Object.entries(initialPresetLabels).map(([value, label]) => (
+            {allowedPresets.map((preset) => (
               <option
-                key={value}
-                value={value}
+                key={preset}
+                value={preset}
               >
-                {label}
+                {initialPresetLabels[preset]}
               </option>
             ))}
           </select>
         </label>
-
         <label>
           <span>Lattice density</span>
           <select
-            value={config.siteCount}
+            value={config.size}
             onChange={(event) =>
               onConfigChange({
                 ...config,
-                siteCount: Number(event.target.value),
+                size: Number(event.target.value),
               })
             }
           >
-            {resolutionOptions.map((siteCount) => (
+            {resolutionOptions.map((size) => (
               <option
-                key={siteCount}
-                value={siteCount}
+                key={size}
+                value={size}
               >
-                {siteCount === 2048 ? `Almost continuum (${siteCount} sites)` : `${siteCount} sites`}
+                {size === resolutionOptions[resolutionOptions.length - 1]
+                  ? `Almost continuum (${size} × ${size})`
+                  : `${size} × ${size}`}
               </option>
             ))}
           </select>
         </label>
-
         <label>
           <span>Displayed quantity</span>
           <select
             value={quantity}
-            onChange={(event) =>
-              onQuantityChange(
-                event.target.value as Quantum1DPeriodicQuantity | Quantum1DFixedQuantity,
-              )
-            }
+            onChange={(event) => onQuantityChange(event.target.value as Quantum2DQuantity)}
           >
             <option value="probability-density">Probability density</option>
             <option value="magnitude">Magnitude |psi|</option>
@@ -138,25 +153,40 @@ export function QuantumPrototypeControls({
             <option value="imaginary-part">Imaginary part</option>
           </select>
         </label>
-
         <label>
-          <span>Carrier mode</span>
+          <span>Mode x</span>
           <input
-            aria-label="Carrier mode"
-            max={12}
-            min={0}
+            aria-label="Mode x"
+            max={6}
+            min={modeSliderMin}
             step={1}
             type="range"
-            value={config.modeNumber}
+            value={config.modeNumberX}
             onChange={(event) =>
               onConfigChange({
                 ...config,
-                modeNumber: Number(event.target.value),
+                modeNumberX: Number(event.target.value),
               })
             }
           />
         </label>
-
+        <label>
+          <span>Mode y</span>
+          <input
+            aria-label="Mode y"
+            max={6}
+            min={modeSliderMin}
+            step={1}
+            type="range"
+            value={config.modeNumberY}
+            onChange={(event) =>
+              onConfigChange({
+                ...config,
+                modeNumberY: Number(event.target.value),
+              })
+            }
+          />
+        </label>
         <label>
           <span>Speed</span>
           <input
@@ -178,7 +208,7 @@ export function QuantumPrototypeControls({
             type="checkbox"
             onChange={(event) => onShowLatticeChange(event.target.checked)}
           />
-          <span>Show lattice sites</span>
+          <span>Show lattice overlay</span>
         </label>
       </div>
 

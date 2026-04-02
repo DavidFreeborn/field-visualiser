@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   Classical1DPeriodicQuantity,
   Classical1DPeriodicSnapshot,
@@ -11,12 +11,17 @@ import type {
   Quantum1DFixedQuantity,
   Quantum1DFixedSnapshot,
 } from '../../physics/quantum/quantum1dFixed';
+import type {
+  Quantum2DPeriodicQuantity,
+  Quantum2DPeriodicSnapshot,
+} from '../../physics/quantum/quantum2dPeriodic';
+import type {
+  Quantum2DFixedQuantity,
+  Quantum2DFixedSnapshot,
+} from '../../physics/quantum/quantum2dFixed';
 import type { Classical1DFixedQuantity, Classical1DFixedSnapshot } from '../../physics/classical/classical1dFixed';
 import type { Classical2DQuantity, Classical2DSnapshot } from '../../physics/classical/classical2d';
-import {
-  PeriodicClassicalFieldRenderer,
-  type PeriodicClassicalFieldRendererOptions,
-} from '../../rendering/pixi/PeriodicClassicalFieldRenderer';
+import type { PeriodicClassicalFieldRendererOptions } from '../../rendering/pixi/PeriodicClassicalFieldRenderer';
 
 interface PrototypeCanvasProps {
   readonly snapshot:
@@ -24,13 +29,17 @@ interface PrototypeCanvasProps {
     | Classical1DFixedSnapshot
     | Classical2DSnapshot
     | Quantum1DPeriodicSnapshot
-    | Quantum1DFixedSnapshot;
+    | Quantum1DFixedSnapshot
+    | Quantum2DPeriodicSnapshot
+    | Quantum2DFixedSnapshot;
   readonly quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
     | Classical2DQuantity
     | Quantum1DPeriodicQuantity
-    | Quantum1DFixedQuantity;
+    | Quantum1DFixedQuantity
+    | Quantum2DPeriodicQuantity
+    | Quantum2DFixedQuantity;
   readonly showLattice: boolean;
   readonly showSprings: boolean;
 }
@@ -41,15 +50,16 @@ export function PrototypeCanvas({
   showLattice,
   showSprings,
 }: PrototypeCanvasProps): React.JSX.Element {
+  const [rendererStatus, setRendererStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [retryNonce, setRetryNonce] = useState(0);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const rendererRef = useRef<PeriodicClassicalFieldRenderer | null>(null);
+  const rendererRef = useRef<RendererInstance | null>(null);
   const snapshotRef = useRef(snapshot);
   const optionsRef = useRef<PeriodicClassicalFieldRendererOptions>({
     showLattice,
     showSprings,
     quantity,
   });
-
   snapshotRef.current = snapshot;
   optionsRef.current = {
     showLattice,
@@ -59,31 +69,56 @@ export function PrototypeCanvas({
 
   useEffect(() => {
     let disposed = false;
+    setRendererStatus('loading');
 
     const host = hostRef.current;
 
     if (host === null) {
       return undefined;
     }
+    host.replaceChildren();
 
-    const renderer = new PeriodicClassicalFieldRenderer(host);
-    rendererRef.current = renderer;
-
-    void renderer.init().then(() => {
+    void loadRendererModule().then(({ PeriodicClassicalFieldRenderer }) => {
       if (disposed) {
-        renderer.destroy();
         return;
       }
 
-      renderer.render(snapshotRef.current, optionsRef.current);
+      const renderer = new PeriodicClassicalFieldRenderer(host);
+      rendererRef.current = renderer;
+
+      void renderer.init().then(() => {
+        if (disposed) {
+          renderer.destroy();
+          return;
+        }
+
+        setRendererStatus('ready');
+        renderer.render(snapshotRef.current, optionsRef.current);
+      }).catch(() => {
+        if (disposed) {
+          return;
+        }
+
+        renderer.destroy();
+        rendererRef.current = null;
+        setRendererStatus('error');
+      });
+    }).catch(() => {
+      if (disposed) {
+        return;
+      }
+
+      rendererModulePromise = null;
+      setRendererStatus('error');
     });
 
     return () => {
       disposed = true;
-      renderer.destroy();
+      rendererRef.current?.destroy();
       rendererRef.current = null;
+      host.replaceChildren();
     };
-  }, []);
+  }, [retryNonce]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -95,27 +130,96 @@ export function PrototypeCanvas({
     renderer.render(snapshot, optionsRef.current);
   }, [quantity, showLattice, showSprings, snapshot]);
 
+  const visualGuide = useMemo(() => getVisualGuide(quantity), [quantity]);
+
   return (
     <section className="visual-panel">
-      <div
-        aria-label="Field visualisation canvas"
-        className="visual-canvas"
-        ref={hostRef}
-        role="img"
-      />
-      <div className="visual-caption">
-        <p>
-          {snapshot.kind === 'classical-2d'
-            ? snapshot.geometry === 'torus-periodic'
-              ? 'This 2D torus is displayed as a flat periodic square with opposite edges identified.'
-              : 'This 2D square has fixed zero boundaries on all four edges.'
-            : snapshot.boundaryCondition === 'periodic'
-              ? 'This 1D circle is rendered as an unwrapped periodic line: the left and right edges are adjacent lattice sites on the same ring.'
-              : 'This 1D interval has fixed-end Dirichlet boundaries: the two endpoint sites remain clamped to zero.'}{' '}
-          Signed quantities use a restrained blue-white-red map; probability density and
-          other unsigned quantities use a red sequential map.
-        </p>
+      <div className="visual-canvas-shell">
+        <div
+          aria-label="Field visualisation canvas"
+          className="visual-canvas"
+          ref={hostRef}
+          role="img"
+        />
+        {rendererStatus !== 'ready' ? (
+          <div
+            aria-live="polite"
+            className="visual-loading"
+            role="status"
+          >
+            {rendererStatus === 'loading'
+              ? 'Loading renderer'
+              : 'Renderer failed to load'}
+            {rendererStatus === 'error' ? (
+              <button
+                className="secondary-button visual-retry"
+                type="button"
+                onClick={() => setRetryNonce((current) => current + 1)}
+              >
+                Retry renderer
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="visual-caption-stack">
+        <p className="visual-caption">{visualGuide.summary}</p>
+        <div className="legend-row">
+          <span className="legend-label">{visualGuide.legendLabelLeft}</span>
+          <div
+            aria-hidden="true"
+            className={`legend-bar ${visualGuide.legendVariant}`}
+          />
+          <span className="legend-label">{visualGuide.legendLabelRight}</span>
+        </div>
       </div>
     </section>
   );
+}
+
+type RendererModule = typeof import('../../rendering/pixi/PeriodicClassicalFieldRenderer');
+type RendererInstance = InstanceType<RendererModule['PeriodicClassicalFieldRenderer']>;
+
+let rendererModulePromise: Promise<RendererModule> | null = null;
+
+function loadRendererModule(): Promise<RendererModule> {
+  rendererModulePromise ??= import('../../rendering/pixi/PeriodicClassicalFieldRenderer');
+  return rendererModulePromise;
+}
+
+function getVisualGuide(quantity: PrototypeCanvasProps['quantity']): {
+  summary: string;
+  legendVariant: 'legend-sequential' | 'legend-diverging';
+  legendLabelLeft: string;
+  legendLabelRight: string;
+} {
+  return {
+    summary: getQuantityLabel(quantity),
+    legendVariant: isUnsignedQuantity(quantity) ? 'legend-sequential' : 'legend-diverging',
+    legendLabelLeft: isUnsignedQuantity(quantity) ? '0' : '-1',
+    legendLabelRight: isUnsignedQuantity(quantity) ? '1' : '+1',
+  };
+}
+
+function getQuantityLabel(quantity: PrototypeCanvasProps['quantity']): string {
+  switch (quantity) {
+    case 'displacement':
+      return 'Displacement';
+    case 'velocity':
+      return 'Velocity';
+    case 'energy-density':
+      return 'Energy density';
+    case 'probability-density':
+      return 'Probability density';
+    case 'magnitude':
+      return 'Magnitude';
+    case 'real-part':
+      return 'Real part';
+    case 'imaginary-part':
+      return 'Imaginary part';
+  }
+}
+
+function isUnsignedQuantity(quantity: PrototypeCanvasProps['quantity']): boolean {
+  return quantity === 'energy-density' || quantity === 'probability-density' || quantity === 'magnitude';
 }

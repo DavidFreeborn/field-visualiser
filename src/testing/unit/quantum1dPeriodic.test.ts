@@ -78,4 +78,25 @@ describe('Quantum1DPeriodicEngine', () => {
       );
     }
   });
+
+  it('matches the locked baseline for a representative periodic one-particle evolution', () => {
+    const engine = new Quantum1DPeriodicEngine(baseConfig);
+    const dt = engine.getDiagnostics().recommendedDt;
+
+    for (let index = 0; index < 20; index += 1) {
+      engine.step(dt);
+    }
+
+    const snapshot = engine.getSnapshot();
+    const diagnostics = engine.getDiagnostics();
+
+    expect(snapshot.time).toBeCloseTo(0.020453077171808547, 12);
+    expect(snapshot.probabilityDensity[0]).toBeCloseTo(3.416745547983585e-10, 12);
+    expect(snapshot.probabilityDensity[32]).toBeCloseTo(5.895719816781625e-7, 12);
+    expect(snapshot.probabilityDensity[64]).toBeCloseTo(0.05170138211164921, 12);
+    expect(snapshot.amplitudeReal[32]).toBeCloseTo(-0.0005316483713658126, 12);
+    expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(0.0005540054069250963, 12);
+    expect(snapshot.totalNorm).toBeCloseTo(1, 12);
+    expect(diagnostics.normError).toBeCloseTo(7.771561172376096e-16, 18);
+  });
 });

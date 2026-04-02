@@ -15,6 +15,8 @@ export function GeometrySwitch({
   mode,
   onGeometryChange,
 }: GeometrySwitchProps): React.JSX.Element {
+  void mode;
+
   return (
     <label>
       <span>Geometry</span>
@@ -24,12 +26,8 @@ export function GeometrySwitch({
       >
         <option value="periodic-circle">Periodic circle</option>
         <option value="fixed-interval">Fixed-end interval</option>
-        {mode === 'classical' ? (
-          <>
-            <option value="square-fixed">2D square, fixed edges</option>
-            <option value="torus-periodic">2D torus, periodic</option>
-          </>
-        ) : null}
+        <option value="square-fixed">2D square, fixed edges</option>
+        <option value="torus-periodic">2D torus, periodic</option>
       </select>
     </label>
   );

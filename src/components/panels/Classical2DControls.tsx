@@ -25,7 +25,7 @@ interface Classical2DControlsProps {
   readonly onShowLatticeChange: (showLattice: boolean) => void;
 }
 
-const resolutionOptions = [24, 32, 48, 64] as const;
+const resolutionOptions = [24, 32, 48, 64, 96, 128, 160, 192, 256] as const;
 
 const initialPresetLabels: Record<Classical2DInitialPreset, string> = {
   'central-gaussian-displacement': 'Central Gaussian displacement',
@@ -73,7 +73,6 @@ export function Classical2DControls({
       <div className="control-header">
         <div>
           <p className="eyebrow">Phase 5 Prototype</p>
-          <h2>{geometry === 'square-fixed' ? '2D square classical membrane' : '2D torus classical membrane'}</h2>
         </div>
         <p className="control-note">
           {geometry === 'square-fixed'
@@ -114,7 +113,7 @@ export function Classical2DControls({
           </select>
         </label>
         <label>
-          <span>Resolution</span>
+          <span>Oscillator density</span>
           <select
             value={config.size}
             onChange={(event) =>
@@ -129,7 +128,7 @@ export function Classical2DControls({
                 key={size}
                 value={size}
               >
-                {size} × {size}
+                {size === 256 ? `Almost continuum (${size} × ${size})` : `${size} × ${size}`}
               </option>
             ))}
           </select>

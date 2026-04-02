@@ -47,10 +47,16 @@ textarea {
   padding: 3rem 0 4rem;
 }
 
+.app-shell-embedded {
+  width: min(100vw, 1120px);
+  padding: 0.75rem 0 1.25rem;
+}
+
 .prototype-grid {
   display: grid;
   gap: 1.5rem;
   margin-top: 1.5rem;
+  justify-items: center;
 }
 
 .hero-panel,
@@ -100,12 +106,12 @@ ol {
 }
 
 h1 {
-  max-width: 12ch;
   font-family: 'Fraunces', 'Times New Roman', serif;
   font-size: clamp(2.8rem, 6vw, 4.8rem);
   font-weight: 500;
   line-height: 0.94;
   letter-spacing: -0.04em;
+  text-align: center;
 }
 
 .lead,
@@ -137,13 +143,22 @@ h1 {
 }
 
 .control-note {
-  max-width: 40ch;
+  max-width: 48ch;
   color: var(--text-muted);
+}
+
+.scene-layout {
+  width: min(1120px, 100%);
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+  grid-template-columns: minmax(290px, 380px) minmax(0, 1fr);
 }
 
 .control-grid {
   display: grid;
   gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .control-grid label,
@@ -193,9 +208,15 @@ h1 {
   color: #fff9f7;
 }
 
+.visual-canvas-shell {
+  position: relative;
+}
+
 .visual-canvas {
   width: 100%;
-  height: 360px;
+  height: 540px;
+  overflow: hidden;
+  border-radius: 20px;
 }
 
 .visual-canvas canvas {
@@ -204,36 +225,35 @@ h1 {
   display: block;
 }
 
-.visual-caption {
-  margin-top: 0.85rem;
-  color: var(--text-muted);
-  font-size: 0.92rem;
-}
-
-.diagnostics-grid {
+.visual-loading {
+  position: absolute;
+  inset: 0;
   display: grid;
-  gap: 0.85rem 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-}
-
-.diagnostics-grid div {
-  padding: 0.9rem 1rem;
-  border: 1px solid rgba(23, 32, 42, 0.08);
-  border-radius: 18px;
-  background: var(--surface-strong);
-}
-
-.diagnostics-grid dt {
-  margin-bottom: 0.3rem;
+  place-items: center;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 241, 236, 0.92));
   color: var(--text-muted);
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
 }
 
-.diagnostics-grid dd {
-  margin: 0;
-  font-weight: 700;
+.visual-retry {
+  min-width: 10rem;
+}
+
+.visual-caption {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.visual-caption-stack {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.7rem;
 }
 
 .panel-header {
@@ -245,72 +265,40 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
-.roadmap-list {
+.legend-row {
   display: grid;
-  gap: 1rem;
-  padding: 0;
-  list-style: none;
-}
-
-.roadmap-item,
-.architecture-grid article {
-  padding: 1rem 1.1rem;
-  border: 1px solid rgba(23, 32, 42, 0.08);
-  border-radius: 20px;
-  background: var(--surface-strong);
-}
-
-.roadmap-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
+  gap: 0.85rem;
   align-items: center;
-  margin-bottom: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.6rem;
+.legend-bar {
+  height: 0.75rem;
   border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  border: 1px solid rgba(23, 32, 42, 0.1);
 }
 
-.status-active {
-  background: var(--accent);
-  color: #fff9f7;
+.legend-diverging {
+  background: linear-gradient(90deg, #2d5f9a 0%, #f8f5f1 50%, #a32525 100%);
 }
 
-.status-planned {
-  background: var(--accent-muted);
-  color: var(--accent);
+.legend-sequential {
+  background: linear-gradient(90deg, #fffaf7 0%, #d65a4b 55%, #8f1f1f 100%);
 }
 
-.architecture-grid {
-  display: grid;
-  gap: 1rem;
+.legend-label,
+.visual-supporting-note {
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
-@media (min-width: 780px) {
-  .prototype-grid {
-    grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
-    align-items: start;
+@media (max-width: 900px) {
+  .scene-layout {
+    grid-template-columns: 1fr;
   }
 
-  .visual-panel {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
-
-  .architecture-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .architecture-grid .panel-header {
-    grid-column: 1 / -1;
+  .visual-canvas {
+    height: 460px;
   }
 }
 
@@ -335,5 +323,11 @@ h1 {
 
   .visual-canvas {
     height: 280px;
+  }
+
+  .button-row,
+  .toggle-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
