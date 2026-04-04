@@ -256,6 +256,14 @@ h1 {
   gap: 0.7rem;
 }
 
+.visual-boundary-caption {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .panel-header {
   display: flex;
   flex-wrap: wrap;

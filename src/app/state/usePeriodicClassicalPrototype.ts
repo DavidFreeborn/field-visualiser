@@ -12,6 +12,7 @@ import { advanceSimulationClock } from './simulationClock';
 interface PrototypeControllerState {
   readonly config: Classical1DPeriodicConfig;
   readonly quantity: Classical1DPeriodicQuantity;
+  readonly circleLayout: 'radial' | 'longitudinal';
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
@@ -20,6 +21,7 @@ interface PrototypeControllerState {
   readonly diagnostics: Classical1DPeriodicDiagnostics;
   readonly setConfig: (config: Classical1DPeriodicConfig) => void;
   readonly setQuantity: (quantity: Classical1DPeriodicQuantity) => void;
+  readonly setCircleLayout: (layout: 'radial' | 'longitudinal') => void;
   readonly setPlaying: (playing: boolean) => void;
   readonly setSpeed: (speed: number) => void;
   readonly setShowLattice: (showLattice: boolean) => void;
@@ -31,6 +33,7 @@ interface PrototypeControllerState {
 export function usePeriodicClassicalPrototype(active = true): PrototypeControllerState {
   const [config, setConfig] = useState(defaultClassical1DPeriodicConfig);
   const [quantity, setQuantity] = useState<Classical1DPeriodicQuantity>('displacement');
+  const [circleLayout, setCircleLayout] = useState<'radial' | 'longitudinal'>('radial');
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [showLattice, setShowLattice] = useState(true);
@@ -103,6 +106,7 @@ export function usePeriodicClassicalPrototype(active = true): PrototypeControlle
   return {
     config,
     quantity,
+    circleLayout,
     playing,
     speed,
     showLattice,
@@ -111,6 +115,7 @@ export function usePeriodicClassicalPrototype(active = true): PrototypeControlle
     diagnostics,
     setConfig,
     setQuantity,
+    setCircleLayout,
     setPlaying,
     setSpeed,
     setShowLattice,

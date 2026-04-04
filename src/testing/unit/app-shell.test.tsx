@@ -34,7 +34,7 @@ describe('App', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /visualizing fields/i,
+        name: /visualising free fields/i,
       }),
     ).toBeInTheDocument();
 
@@ -117,7 +117,7 @@ describe('App', () => {
 
     expect(
       screen.queryByRole('heading', {
-        name: /visualizing fields/i,
+        name: /visualising free fields/i,
       }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound/i)).toBeInTheDocument();

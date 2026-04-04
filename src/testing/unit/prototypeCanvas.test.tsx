@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { PrototypeCanvas } from '../../components/layout/PrototypeCanvas';
 import type { Classical1DPeriodicSnapshot } from '../../physics/classical/classical1dPeriodic';
-import type { Quantum2DPeriodicSnapshot } from '../../physics/quantum/quantum2dPeriodic';
+import type { Quantum2DDisplaySnapshot } from '../../physics/quantum/quantum2dDisplay';
 
 const constructorSpy = vi.fn();
 const initSpy = vi.fn(() => Promise.resolve());
@@ -30,8 +30,13 @@ vi.mock('../../rendering/pixi/PeriodicClassicalFieldRenderer', () => ({
     }
 
     public render(
-      snapshot: Classical1DPeriodicSnapshot,
-      options: { quantity: string; showLattice: boolean; showSprings: boolean },
+      snapshot: Classical1DPeriodicSnapshot | Quantum2DDisplaySnapshot,
+      options: {
+        quantity: string;
+        showLattice: boolean;
+        showSprings: boolean;
+        circleLayout?: 'radial' | 'longitudinal';
+      },
     ): void {
       renderSpy(snapshot, options);
     }
@@ -156,7 +161,8 @@ describe('PrototypeCanvas', () => {
     );
 
     await waitFor(() => {
-      expect(renderSpy).toHaveBeenCalledWith(nextSnapshot, {
+      expect(renderSpy).toHaveBeenLastCalledWith(nextSnapshot, {
+        circleLayout: 'radial',
         quantity: 'velocity',
         showLattice: false,
         showSprings: true,
@@ -174,8 +180,9 @@ describe('PrototypeCanvas', () => {
     initSpy.mockClear();
     destroySpy.mockClear();
 
-    const quantumSnapshot: Quantum2DPeriodicSnapshot = {
-      kind: 'quantum-2d-periodic',
+    const quantumSnapshot: Quantum2DDisplaySnapshot = {
+      kind: 'quantum-2d-display',
+      sourceKind: 'quantum-2d-periodic',
       time: 0,
       systemLabel: '2D torus',
       boundaryCondition: 'periodic',
@@ -186,11 +193,7 @@ describe('PrototypeCanvas', () => {
       domainLength: 1,
       spacing: 0.25,
       geometry: 'torus-periodic',
-      amplitudeReal: new Float64Array(16),
-      amplitudeImaginary: new Float64Array(16),
-      magnitude: new Float64Array(16),
-      probabilityDensity: new Float64Array(16),
-      modeWeights: new Float64Array(16),
+      displayValues: new Float32Array(16),
       totalNorm: 1,
     };
 
@@ -208,10 +211,11 @@ describe('PrototypeCanvas', () => {
       expect(initSpy).toHaveBeenCalledTimes(1);
     });
 
-    const nextSnapshot: Quantum2DPeriodicSnapshot = {
+    const nextSnapshot: Quantum2DDisplaySnapshot = {
       ...quantumSnapshot,
       time: 0.1,
-      probabilityDensity: Float64Array.from({ length: 16 }, (_, index) => index / 16),
+      quantity: 'magnitude',
+      displayValues: Float32Array.from({ length: 16 }, (_, index) => index / 16),
     };
 
     rerender(
@@ -224,7 +228,8 @@ describe('PrototypeCanvas', () => {
     );
 
     await waitFor(() => {
-      expect(renderSpy).toHaveBeenCalledWith(nextSnapshot, {
+      expect(renderSpy).toHaveBeenLastCalledWith(nextSnapshot, {
+        circleLayout: 'radial',
         quantity: 'magnitude',
         showLattice: true,
         showSprings: false,

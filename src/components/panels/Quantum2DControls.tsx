@@ -36,7 +36,7 @@ const torusResolutionOptions = [16, 24, 32, 40, 48, 64, 80, 96] as const;
 const squareResolutionOptions = [17, 25, 33, 41, 49, 65, 81] as const;
 
 const initialPresetLabels: Record<Quantum2DInitialPreset, string> = {
-  'site-localized': 'Site-localized state',
+  'site-localized': 'Site-localised state',
   'gaussian-wavepacket': 'Gaussian packet',
   'selected-normal-mode': 'Selected normal mode',
   'split-superposition': 'Split superposition',

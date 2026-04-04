@@ -13,12 +13,11 @@ import type {
 } from '../../physics/quantum/quantum1dFixed';
 import type {
   Quantum2DPeriodicQuantity,
-  Quantum2DPeriodicSnapshot,
 } from '../../physics/quantum/quantum2dPeriodic';
 import type {
   Quantum2DFixedQuantity,
-  Quantum2DFixedSnapshot,
 } from '../../physics/quantum/quantum2dFixed';
+import type { Quantum2DDisplaySnapshot } from '../../physics/quantum/quantum2dDisplay';
 import type { Classical1DFixedQuantity, Classical1DFixedSnapshot } from '../../physics/classical/classical1dFixed';
 import type { Classical2DQuantity, Classical2DSnapshot } from '../../physics/classical/classical2d';
 import type { PeriodicClassicalFieldRendererOptions } from '../../rendering/pixi/PeriodicClassicalFieldRenderer';
@@ -30,8 +29,7 @@ interface PrototypeCanvasProps {
     | Classical2DSnapshot
     | Quantum1DPeriodicSnapshot
     | Quantum1DFixedSnapshot
-    | Quantum2DPeriodicSnapshot
-    | Quantum2DFixedSnapshot;
+    | Quantum2DDisplaySnapshot;
   readonly quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
@@ -42,6 +40,7 @@ interface PrototypeCanvasProps {
     | Quantum2DFixedQuantity;
   readonly showLattice: boolean;
   readonly showSprings: boolean;
+  readonly circleLayout?: 'radial' | 'longitudinal';
 }
 
 export function PrototypeCanvas({
@@ -49,6 +48,7 @@ export function PrototypeCanvas({
   quantity,
   showLattice,
   showSprings,
+  circleLayout = 'radial',
 }: PrototypeCanvasProps): React.JSX.Element {
   const [rendererStatus, setRendererStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryNonce, setRetryNonce] = useState(0);
@@ -59,12 +59,14 @@ export function PrototypeCanvas({
     showLattice,
     showSprings,
     quantity,
+    circleLayout,
   });
   snapshotRef.current = snapshot;
   optionsRef.current = {
     showLattice,
     showSprings,
     quantity,
+    circleLayout,
   };
 
   useEffect(() => {
@@ -128,7 +130,7 @@ export function PrototypeCanvas({
     }
 
     renderer.render(snapshot, optionsRef.current);
-  }, [quantity, showLattice, showSprings, snapshot]);
+  }, [circleLayout, quantity, showLattice, showSprings, snapshot]);
 
   const visualGuide = useMemo(() => getVisualGuide(quantity), [quantity]);
 
@@ -163,6 +165,7 @@ export function PrototypeCanvas({
         ) : null}
       </div>
       <div className="visual-caption-stack">
+        <p className="visual-boundary-caption">{getBoundaryLabel(snapshot)}</p>
         <p className="visual-caption">{visualGuide.summary}</p>
         <div className="legend-row">
           <span className="legend-label">{visualGuide.legendLabelLeft}</span>
@@ -222,4 +225,13 @@ function getQuantityLabel(quantity: PrototypeCanvasProps['quantity']): string {
 
 function isUnsignedQuantity(quantity: PrototypeCanvasProps['quantity']): boolean {
   return quantity === 'energy-density' || quantity === 'probability-density' || quantity === 'magnitude';
+}
+
+function getBoundaryLabel(snapshot: PrototypeCanvasProps['snapshot']): string {
+  switch (snapshot.boundaryCondition) {
+    case 'dirichlet':
+      return 'Dirichlet boundary conditions';
+    case 'periodic':
+      return 'Periodic boundary conditions';
+  }
 }

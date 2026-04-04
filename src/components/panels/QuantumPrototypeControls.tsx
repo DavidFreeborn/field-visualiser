@@ -29,7 +29,7 @@ interface QuantumPrototypeControlsProps {
 const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048] as const;
 
 const initialPresetLabels: Record<Quantum1DInitialPreset, string> = {
-  'site-localized': 'Site-localized state',
+  'site-localized': 'Site-localised state',
   'gaussian-wavepacket': 'Gaussian wavepacket',
   'selected-normal-mode': 'Selected normal mode',
   'counterpropagating-superposition': 'Counterpropagating superposition',
@@ -56,9 +56,6 @@ export function QuantumPrototypeControls({
   return (
     <section className="control-panel">
       <div className="control-header">
-        <div>
-          <p className="eyebrow">Phase 3 Prototype</p>
-        </div>
         <p className="control-note">
           {geometry === 'periodic-circle'
             ? 'Free-field one-particle evolution on the periodic lattice Hilbert space, shown on a circular domain.'

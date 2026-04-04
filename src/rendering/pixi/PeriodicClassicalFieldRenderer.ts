@@ -28,12 +28,11 @@ import type {
 } from '../../physics/quantum/quantum1dFixed';
 import type {
   Quantum2DPeriodicQuantity,
-  Quantum2DPeriodicSnapshot,
 } from '../../physics/quantum/quantum2dPeriodic';
 import type {
   Quantum2DFixedQuantity,
-  Quantum2DFixedSnapshot,
 } from '../../physics/quantum/quantum2dFixed';
+import type { Quantum2DDisplaySnapshot } from '../../physics/quantum/quantum2dDisplay';
 import {
   mapDensityToSequentialNumber,
   mapSignedValueToDivergingNumber,
@@ -42,6 +41,7 @@ import {
 export interface PeriodicClassicalFieldRendererOptions {
   readonly showLattice: boolean;
   readonly showSprings: boolean;
+  readonly circleLayout?: 'radial' | 'longitudinal';
   readonly quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
@@ -58,8 +58,7 @@ type Periodic1DSnapshot =
   | Classical2DSnapshot
   | Quantum1DPeriodicSnapshot
   | Quantum1DFixedSnapshot
-  | Quantum2DPeriodicSnapshot
-  | Quantum2DFixedSnapshot;
+  | Quantum2DDisplaySnapshot;
 
 const PADDING_X = 28;
 const PADDING_Y = 30;
@@ -146,8 +145,7 @@ export class PeriodicClassicalFieldRenderer {
     const height = this.host.clientHeight;
     if (
       snapshot.kind === 'classical-2d' ||
-      snapshot.kind === 'quantum-2d-periodic' ||
-      snapshot.kind === 'quantum-2d-fixed'
+      snapshot.kind === 'quantum-2d-display'
     ) {
       this.render2D(snapshot, width, height, options);
       this.app.render();
@@ -158,9 +156,23 @@ export class PeriodicClassicalFieldRenderer {
     const values = getDisplayedValues(snapshot, options.quantity);
     const maxMagnitude = getMaxMagnitude(values) || 1;
     const useSequentialMap = usesSequentialMap(options.quantity);
+    const siteRadius = get1DSiteRadius(snapshot.siteCount);
+    const bondWidth = get1DBondWidth(snapshot.siteCount);
+    const showBondHints = options.showSprings && snapshot.siteCount < 256;
+    const showTraceLine = !(options.showLattice && snapshot.siteCount >= 512);
 
     if (snapshot.boundaryCondition === 'periodic') {
-      this.renderCircular1D(width, height, values, maxMagnitude, useSequentialMap, options);
+      this.renderCircular1D(
+        width,
+        height,
+        values,
+        maxMagnitude,
+        useSequentialMap,
+        options,
+        siteRadius,
+        bondWidth,
+        showBondHints,
+      );
       this.app.render();
       return;
     }
@@ -191,11 +203,11 @@ export class PeriodicClassicalFieldRenderer {
           : mapSignedValueToDivergingNumber(values[index], maxMagnitude);
 
         if (options.showLattice) {
-          this.masses.circle(x, y, 3.2).fill({ color, alpha: 0.95 });
+          this.masses.circle(x, y, siteRadius).fill({ color, alpha: 0.95 });
         }
 
         if (
-          options.showSprings &&
+          showBondHints &&
           snapshot.kind === 'classical-1d-fixed' &&
           index < values.length - 1
         ) {
@@ -213,12 +225,18 @@ export class PeriodicClassicalFieldRenderer {
           this.bonds
             .moveTo(x, y)
             .lineTo(nextX, nextY)
-            .stroke({ width: 1.2, color: bondColor, alpha: 0.35 });
+            .stroke({ width: bondWidth, color: bondColor, alpha: 0.28 });
         }
       }
     }
 
-    this.waveform.stroke({ width: 2.5, color: 0x18222c, alpha: 0.95 });
+    if (showTraceLine) {
+      this.waveform.stroke({
+        width: getWaveformWidth(snapshot.siteCount),
+        color: 0x18222c,
+        alpha: 0.95,
+      });
+    }
     this.app.render();
   }
 
@@ -233,7 +251,7 @@ export class PeriodicClassicalFieldRenderer {
   }
 
   private render2D(
-    snapshot: Classical2DSnapshot | Quantum2DPeriodicSnapshot | Quantum2DFixedSnapshot,
+    snapshot: Classical2DSnapshot | Quantum2DDisplaySnapshot,
     width: number,
     height: number,
     options: PeriodicClassicalFieldRendererOptions,
@@ -297,15 +315,21 @@ export class PeriodicClassicalFieldRenderer {
   private renderCircular1D(
     width: number,
     height: number,
-    values: Float64Array,
+    values: ArrayLike<number>,
     maxMagnitude: number,
     useSequentialMap: boolean,
     options: PeriodicClassicalFieldRendererOptions,
+    siteRadius: number,
+    bondWidth: number,
+    showBondHints: boolean,
   ): void {
     const centerX = width / 2;
     const centerY = height / 2;
     const baseRadius = Math.max(32, Math.min(width, height) * 0.29);
     const radialScale = Math.min(width, height) * 0.1;
+    const tangentialScale = Math.min(width, height) * 0.07;
+    const useLongitudinalLayout = options.circleLayout === 'longitudinal' && !useSequentialMap;
+    const showTraceLine = !(options.showLattice && values.length >= 512);
 
     this.drawChrome(width, height);
     this.waveform.clear();
@@ -318,14 +342,18 @@ export class PeriodicClassicalFieldRenderer {
       .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.45 });
 
     for (let index = 0; index < values.length; index += 1) {
-      const angle = (-Math.PI / 2) + (2 * Math.PI * index) / values.length;
-      const normalizedValue = values[index] / maxMagnitude;
-      const radiusOffset = useSequentialMap
-        ? Math.max(0, normalizedValue) * radialScale
-        : normalizedValue * radialScale;
-      const radius = baseRadius + radiusOffset;
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
+      const { x, y } = computeCircularPoint(
+        index,
+        values,
+        maxMagnitude,
+        centerX,
+        centerY,
+        baseRadius,
+        radialScale,
+        tangentialScale,
+        useSequentialMap,
+        useLongitudinalLayout,
+      );
 
       if (index === 0) {
         this.waveform.moveTo(x, y);
@@ -333,25 +361,29 @@ export class PeriodicClassicalFieldRenderer {
         this.waveform.lineTo(x, y);
       }
 
-      if (options.showLattice || options.showSprings) {
+      if (options.showLattice || showBondHints) {
         const color = useSequentialMap
           ? mapDensityToSequentialNumber(values[index], maxMagnitude)
           : mapSignedValueToDivergingNumber(values[index], maxMagnitude);
 
         if (options.showLattice) {
-          this.masses.circle(x, y, 3.2).fill({ color, alpha: 0.95 });
+          this.masses.circle(x, y, siteRadius).fill({ color, alpha: 0.95 });
         }
 
-        if (options.showSprings) {
+        if (showBondHints) {
           const nextIndex = (index + 1) % values.length;
-          const nextAngle = (-Math.PI / 2) + (2 * Math.PI * nextIndex) / values.length;
-          const nextNormalizedValue = values[nextIndex] / maxMagnitude;
-          const nextRadiusOffset = useSequentialMap
-            ? Math.max(0, nextNormalizedValue) * radialScale
-            : nextNormalizedValue * radialScale;
-          const nextRadius = baseRadius + nextRadiusOffset;
-          const nextX = centerX + Math.cos(nextAngle) * nextRadius;
-          const nextY = centerY + Math.sin(nextAngle) * nextRadius;
+          const { x: nextX, y: nextY } = computeCircularPoint(
+            nextIndex,
+            values,
+            maxMagnitude,
+            centerX,
+            centerY,
+            baseRadius,
+            radialScale,
+            tangentialScale,
+            useSequentialMap,
+            useLongitudinalLayout,
+          );
           const bondColor = useSequentialMap
             ? 0x8f2d28
             : mapSignedValueToDivergingNumber(values[nextIndex] - values[index], maxMagnitude);
@@ -359,12 +391,18 @@ export class PeriodicClassicalFieldRenderer {
           this.bonds
             .moveTo(x, y)
             .lineTo(nextX, nextY)
-            .stroke({ width: 1.2, color: bondColor, alpha: 0.35 });
+            .stroke({ width: bondWidth, color: bondColor, alpha: 0.28 });
         }
       }
     }
 
-    this.waveform.closePath().stroke({ width: 2.5, color: 0x18222c, alpha: 0.95 });
+    if (showTraceLine) {
+      this.waveform.closePath().stroke({
+        width: getWaveformWidth(values.length),
+        color: 0x18222c,
+        alpha: 0.95,
+      });
+    }
   }
 
   private render2DLatticeOverlay(
@@ -478,7 +516,7 @@ function getDisplayedValues(
     | Quantum1DFixedQuantity
     | Quantum2DPeriodicQuantity
     | Quantum2DFixedQuantity,
-): Float64Array {
+): Float64Array | Float32Array {
   if (snapshot.kind === 'classical-2d') {
     switch (quantity) {
       case 'displacement':
@@ -492,19 +530,8 @@ function getDisplayedValues(
     }
   }
 
-  if (snapshot.kind === 'quantum-2d-periodic' || snapshot.kind === 'quantum-2d-fixed') {
-    switch (quantity) {
-      case 'probability-density':
-        return snapshot.probabilityDensity;
-      case 'magnitude':
-        return snapshot.magnitude;
-      case 'real-part':
-        return snapshot.amplitudeReal;
-      case 'imaginary-part':
-        return snapshot.amplitudeImaginary;
-      default:
-        return snapshot.probabilityDensity;
-    }
+  if (snapshot.kind === 'quantum-2d-display') {
+    return snapshot.displayValues;
   }
 
   if (snapshot.kind === 'classical-1d-periodic' || snapshot.kind === 'classical-1d-fixed') {
@@ -547,7 +574,7 @@ function usesSequentialMap(
   return quantity === 'energy-density' || quantity === 'probability-density' || quantity === 'magnitude';
 }
 
-function getMaxMagnitude(values: Float64Array): number {
+function getMaxMagnitude(values: ArrayLike<number>): number {
   let maxMagnitude = 0;
 
   for (let index = 0; index < values.length; index += 1) {
@@ -555,6 +582,92 @@ function getMaxMagnitude(values: Float64Array): number {
   }
 
   return maxMagnitude;
+}
+
+function get1DSiteRadius(siteCount: number): number {
+  if (siteCount >= 1024) {
+    return 1.45;
+  }
+  if (siteCount >= 512) {
+    return 1.7;
+  }
+  if (siteCount >= 256) {
+    return 2.05;
+  }
+  if (siteCount >= 128) {
+    return 2.5;
+  }
+  if (siteCount >= 64) {
+    return 3.1;
+  }
+
+  return 3.6;
+}
+
+function get1DBondWidth(siteCount: number): number {
+  if (siteCount >= 256) {
+    return 0.28;
+  }
+  if (siteCount >= 128) {
+    return 0.42;
+  }
+  if (siteCount >= 64) {
+    return 0.56;
+  }
+
+  return 0.72;
+}
+
+function getWaveformWidth(siteCount: number): number {
+  if (siteCount >= 1024) {
+    return 0.6;
+  }
+  if (siteCount >= 512) {
+    return 0.75;
+  }
+  if (siteCount >= 256) {
+    return 0.95;
+  }
+  if (siteCount >= 128) {
+    return 1.15;
+  }
+
+  return 1.35;
+}
+
+function computeCircularPoint(
+  index: number,
+  values: ArrayLike<number>,
+  maxMagnitude: number,
+  centerX: number,
+  centerY: number,
+  baseRadius: number,
+  radialScale: number,
+  tangentialScale: number,
+  useSequentialMap: boolean,
+  useLongitudinalLayout: boolean,
+): { x: number; y: number } {
+  const baseAngle = (-Math.PI / 2) + (2 * Math.PI * index) / values.length;
+  const normalizedValue = values[index] / maxMagnitude;
+
+  if (useLongitudinalLayout) {
+    const angleOffset = (normalizedValue * tangentialScale) / baseRadius;
+    const angle = baseAngle + angleOffset;
+    return {
+      x: centerX + Math.cos(angle) * baseRadius,
+      y: centerY + Math.sin(angle) * baseRadius,
+    };
+  }
+
+  const radiusOffset = useSequentialMap
+    ? Math.max(0, normalizedValue) * radialScale
+    : normalizedValue * radialScale;
+  const radius = baseRadius + radiusOffset;
+
+  return {
+    x: centerX + Math.cos(baseAngle) * radius,
+    y: centerY + Math.sin(baseAngle) * radius,
+  };
 }
 
 function selectHeatmapGrid(
@@ -600,7 +713,7 @@ function populateHeatmapPixels({
   downsampleAccum,
   downsampleCounts,
 }: {
-  values: Float64Array;
+  values: ArrayLike<number>;
   cols: number;
   rows: number;
   targetCols: number;

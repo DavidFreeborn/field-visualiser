@@ -12,6 +12,7 @@ interface PrototypeControlsProps {
   readonly geometry: Geometry1D;
   readonly config: Classical1DPeriodicConfig | Classical1DFixedConfig;
   readonly quantity: Classical1DPeriodicQuantity;
+  readonly circleLayout: 'radial' | 'longitudinal';
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
@@ -20,6 +21,7 @@ interface PrototypeControlsProps {
   readonly onGeometryChange: (geometry: Geometry1D) => void;
   readonly onConfigChange: (nextConfig: Classical1DPeriodicConfig | Classical1DFixedConfig) => void;
   readonly onQuantityChange: (quantity: Classical1DPeriodicQuantity) => void;
+  readonly onCircleLayoutChange: (layout: 'radial' | 'longitudinal') => void;
   readonly onPlayingChange: (playing: boolean) => void;
   readonly onReset: () => void;
   readonly onStep: () => void;
@@ -43,6 +45,7 @@ export function PrototypeControls({
   geometry,
   config,
   quantity,
+  circleLayout,
   playing,
   speed,
   showLattice,
@@ -51,6 +54,7 @@ export function PrototypeControls({
   onGeometryChange,
   onConfigChange,
   onQuantityChange,
+  onCircleLayoutChange,
   onPlayingChange,
   onReset,
   onStep,
@@ -61,9 +65,6 @@ export function PrototypeControls({
   return (
     <section className="control-panel">
       <div className="control-header">
-        <div>
-          <p className="eyebrow">Phase 2 Prototype</p>
-        </div>
         <p className="control-note">
           {geometry === 'periodic-circle'
             ? 'Classical nearest-neighbour ring with periodic wraparound, shown directly as a circle.'
@@ -140,6 +141,21 @@ export function PrototypeControls({
             <option value="energy-density">Local energy density</option>
           </select>
         </label>
+
+        {geometry === 'periodic-circle' ? (
+          <label>
+            <span>Circle motion</span>
+            <select
+              value={circleLayout}
+              onChange={(event) =>
+                onCircleLayoutChange(event.target.value as 'radial' | 'longitudinal')
+              }
+            >
+              <option value="radial">Radial</option>
+              <option value="longitudinal">Longitudinal</option>
+            </select>
+          </label>
+        ) : null}
 
         <label>
           <span>Speed</span>

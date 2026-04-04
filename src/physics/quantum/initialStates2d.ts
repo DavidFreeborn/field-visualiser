@@ -105,27 +105,47 @@ export function discreteFourierTransform2D(
   outReal: Float64Array = new Float64Array(real.length),
   outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const normalization = 1 / size;
+  const basis = getPeriodicBasisCache(size);
+  const rowReal = new Float64Array(real.length);
+  const rowImaginary = new Float64Array(real.length);
 
-  for (let ky = 0; ky < size; ky += 1) {
+  for (let y = 0; y < size; y += 1) {
+    const rowOffset = y * size;
     for (let kx = 0; kx < size; kx += 1) {
       let sumReal = 0;
       let sumImaginary = 0;
+      const basisOffset = kx * size;
+
+      for (let x = 0; x < size; x += 1) {
+        const index = rowOffset + x;
+        const cosPhase = basis.cos[basisOffset + x];
+        const sinPhase = basis.sin[basisOffset + x];
+        sumReal += real[index] * cosPhase + imaginary[index] * sinPhase;
+        sumImaginary += (-real[index] * sinPhase) + imaginary[index] * cosPhase;
+      }
+
+      rowReal[rowOffset + kx] = basis.normalization * sumReal;
+      rowImaginary[rowOffset + kx] = basis.normalization * sumImaginary;
+    }
+  }
+
+  for (let kx = 0; kx < size; kx += 1) {
+    for (let ky = 0; ky < size; ky += 1) {
+      let sumReal = 0;
+      let sumImaginary = 0;
+      const basisOffset = ky * size;
 
       for (let y = 0; y < size; y += 1) {
-        for (let x = 0; x < size; x += 1) {
-          const phase = (-2 * Math.PI * ((kx * x) + (ky * y))) / size;
-          const cosPhase = Math.cos(phase);
-          const sinPhase = Math.sin(phase);
-          const index = flattenIndex2D(x, y, size);
-          sumReal += real[index] * cosPhase - imaginary[index] * sinPhase;
-          sumImaginary += real[index] * sinPhase + imaginary[index] * cosPhase;
-        }
+        const index = y * size + kx;
+        const cosPhase = basis.cos[basisOffset + y];
+        const sinPhase = basis.sin[basisOffset + y];
+        sumReal += rowReal[index] * cosPhase + rowImaginary[index] * sinPhase;
+        sumImaginary += (-rowReal[index] * sinPhase) + rowImaginary[index] * cosPhase;
       }
 
       const modeIndex = flattenIndex2D(kx, ky, size);
-      outReal[modeIndex] = normalization * sumReal;
-      outImaginary[modeIndex] = normalization * sumImaginary;
+      outReal[modeIndex] = basis.normalization * sumReal;
+      outImaginary[modeIndex] = basis.normalization * sumImaginary;
     }
   }
 
@@ -139,27 +159,48 @@ export function inverseDiscreteFourierTransform2D(
   outReal: Float64Array = new Float64Array(real.length),
   outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const normalization = 1 / size;
+  const basis = getPeriodicBasisCache(size);
+  const columnReal = new Float64Array(real.length);
+  const columnImaginary = new Float64Array(real.length);
+
+  for (let kx = 0; kx < size; kx += 1) {
+    for (let y = 0; y < size; y += 1) {
+      let sumReal = 0;
+      let sumImaginary = 0;
+      const basisOffset = y * size;
+
+      for (let ky = 0; ky < size; ky += 1) {
+        const index = flattenIndex2D(kx, ky, size);
+        const cosPhase = basis.cos[basisOffset + ky];
+        const sinPhase = basis.sin[basisOffset + ky];
+        sumReal += real[index] * cosPhase - imaginary[index] * sinPhase;
+        sumImaginary += real[index] * sinPhase + imaginary[index] * cosPhase;
+      }
+
+      const siteIndex = y * size + kx;
+      columnReal[siteIndex] = basis.normalization * sumReal;
+      columnImaginary[siteIndex] = basis.normalization * sumImaginary;
+    }
+  }
 
   for (let y = 0; y < size; y += 1) {
+    const rowOffset = y * size;
     for (let x = 0; x < size; x += 1) {
       let sumReal = 0;
       let sumImaginary = 0;
+      const basisOffset = x * size;
 
-      for (let ky = 0; ky < size; ky += 1) {
-        for (let kx = 0; kx < size; kx += 1) {
-          const phase = (2 * Math.PI * ((kx * x) + (ky * y))) / size;
-          const cosPhase = Math.cos(phase);
-          const sinPhase = Math.sin(phase);
-          const modeIndex = flattenIndex2D(kx, ky, size);
-          sumReal += real[modeIndex] * cosPhase - imaginary[modeIndex] * sinPhase;
-          sumImaginary += real[modeIndex] * sinPhase + imaginary[modeIndex] * cosPhase;
-        }
+      for (let kx = 0; kx < size; kx += 1) {
+        const index = rowOffset + kx;
+        const cosPhase = basis.cos[basisOffset + kx];
+        const sinPhase = basis.sin[basisOffset + kx];
+        sumReal += columnReal[index] * cosPhase - columnImaginary[index] * sinPhase;
+        sumImaginary += columnReal[index] * sinPhase + columnImaginary[index] * cosPhase;
       }
 
-      const siteIndex = flattenIndex2D(x, y, size);
-      outReal[siteIndex] = normalization * sumReal;
-      outImaginary[siteIndex] = normalization * sumImaginary;
+      const siteIndex = rowOffset + x;
+      outReal[siteIndex] = basis.normalization * sumReal;
+      outImaginary[siteIndex] = basis.normalization * sumImaginary;
     }
   }
 
@@ -173,27 +214,44 @@ export function sineTransform2D(
   outReal: Float64Array = new Float64Array(real.length),
   outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const normalization = 2 / (interiorSize + 1);
+  const basis = getSineBasisCache(interiorSize);
+  const rowReal = new Float64Array(real.length);
+  const rowImaginary = new Float64Array(real.length);
 
-  for (let my = 0; my < interiorSize; my += 1) {
+  for (let y = 0; y < interiorSize; y += 1) {
+    const rowOffset = y * interiorSize;
     for (let mx = 0; mx < interiorSize; mx += 1) {
       let sumReal = 0;
       let sumImaginary = 0;
+      const basisOffset = mx * interiorSize;
+
+      for (let x = 0; x < interiorSize; x += 1) {
+        const basisValue = basis.values[basisOffset + x];
+        sumReal += basisValue * real[rowOffset + x];
+        sumImaginary += basisValue * imaginary[rowOffset + x];
+      }
+
+      rowReal[rowOffset + mx] = basis.normalization * sumReal;
+      rowImaginary[rowOffset + mx] = basis.normalization * sumImaginary;
+    }
+  }
+
+  for (let mx = 0; mx < interiorSize; mx += 1) {
+    for (let my = 0; my < interiorSize; my += 1) {
+      let sumReal = 0;
+      let sumImaginary = 0;
+      const basisOffset = my * interiorSize;
 
       for (let y = 0; y < interiorSize; y += 1) {
-        const basisY = Math.sin((Math.PI * (my + 1) * (y + 1)) / (interiorSize + 1));
-        for (let x = 0; x < interiorSize; x += 1) {
-          const basisX = Math.sin((Math.PI * (mx + 1) * (x + 1)) / (interiorSize + 1));
-          const basisValue = normalization * basisX * basisY;
-          const index = flattenIndex2D(x, y, interiorSize);
-          sumReal += basisValue * real[index];
-          sumImaginary += basisValue * imaginary[index];
-        }
+        const basisValue = basis.values[basisOffset + y];
+        const index = y * interiorSize + mx;
+        sumReal += basisValue * rowReal[index];
+        sumImaginary += basisValue * rowImaginary[index];
       }
 
       const modeIndex = flattenIndex2D(mx, my, interiorSize);
-      outReal[modeIndex] = sumReal;
-      outImaginary[modeIndex] = sumImaginary;
+      outReal[modeIndex] = basis.normalization * sumReal;
+      outImaginary[modeIndex] = basis.normalization * sumImaginary;
     }
   }
 
@@ -207,27 +265,46 @@ export function inverseSineTransform2D(
   outReal: Float64Array = new Float64Array(real.length),
   outImaginary: Float64Array = new Float64Array(real.length),
 ): ComplexStateVector {
-  const normalization = 2 / (interiorSize + 1);
+  const basis = getSineBasisCache(interiorSize);
+  const columnReal = new Float64Array(real.length);
+  const columnImaginary = new Float64Array(real.length);
+
+  for (let mx = 0; mx < interiorSize; mx += 1) {
+    for (let y = 0; y < interiorSize; y += 1) {
+      let sumReal = 0;
+      let sumImaginary = 0;
+      const basisOffset = y * interiorSize;
+
+      for (let my = 0; my < interiorSize; my += 1) {
+        const basisValue = basis.values[basisOffset + my];
+        const modeIndex = flattenIndex2D(mx, my, interiorSize);
+        sumReal += basisValue * real[modeIndex];
+        sumImaginary += basisValue * imaginary[modeIndex];
+      }
+
+      const siteIndex = y * interiorSize + mx;
+      columnReal[siteIndex] = basis.normalization * sumReal;
+      columnImaginary[siteIndex] = basis.normalization * sumImaginary;
+    }
+  }
 
   for (let y = 0; y < interiorSize; y += 1) {
+    const rowOffset = y * interiorSize;
     for (let x = 0; x < interiorSize; x += 1) {
       let sumReal = 0;
       let sumImaginary = 0;
+      const basisOffset = x * interiorSize;
 
-      for (let my = 0; my < interiorSize; my += 1) {
-        const basisY = Math.sin((Math.PI * (my + 1) * (y + 1)) / (interiorSize + 1));
-        for (let mx = 0; mx < interiorSize; mx += 1) {
-          const basisX = Math.sin((Math.PI * (mx + 1) * (x + 1)) / (interiorSize + 1));
-          const basisValue = normalization * basisX * basisY;
-          const modeIndex = flattenIndex2D(mx, my, interiorSize);
-          sumReal += basisValue * real[modeIndex];
-          sumImaginary += basisValue * imaginary[modeIndex];
-        }
+      for (let mx = 0; mx < interiorSize; mx += 1) {
+        const basisValue = basis.values[basisOffset + mx];
+        const index = rowOffset + mx;
+        sumReal += basisValue * columnReal[index];
+        sumImaginary += basisValue * columnImaginary[index];
       }
 
-      const siteIndex = flattenIndex2D(x, y, interiorSize);
-      outReal[siteIndex] = sumReal;
-      outImaginary[siteIndex] = sumImaginary;
+      const siteIndex = rowOffset + x;
+      outReal[siteIndex] = basis.normalization * sumReal;
+      outImaginary[siteIndex] = basis.normalization * sumImaginary;
     }
   }
 
@@ -407,6 +484,65 @@ function normalize2DState(state: ComplexStateVector): ComplexStateVector {
   }
 
   return { real, imaginary };
+}
+
+const periodicBasisCache = new Map<number, { cos: Float64Array; sin: Float64Array; normalization: number }>();
+const sineBasisCache = new Map<number, { values: Float64Array; normalization: number }>();
+
+function getPeriodicBasisCache(size: number): {
+  cos: Float64Array;
+  sin: Float64Array;
+  normalization: number;
+} {
+  const cached = periodicBasisCache.get(size);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const cos = new Float64Array(size * size);
+  const sin = new Float64Array(size * size);
+  const normalization = 1 / Math.sqrt(size);
+
+  for (let mode = 0; mode < size; mode += 1) {
+    const modeOffset = mode * size;
+    for (let sample = 0; sample < size; sample += 1) {
+      const phase = (2 * Math.PI * mode * sample) / size;
+      cos[modeOffset + sample] = Math.cos(phase);
+      sin[modeOffset + sample] = Math.sin(phase);
+    }
+  }
+
+  const basis = { cos, sin, normalization };
+  periodicBasisCache.set(size, basis);
+  return basis;
+}
+
+function getSineBasisCache(interiorSize: number): {
+  values: Float64Array;
+  normalization: number;
+} {
+  const cached = sineBasisCache.get(interiorSize);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const values = new Float64Array(interiorSize * interiorSize);
+  const normalization = Math.sqrt(2 / (interiorSize + 1));
+
+  for (let mode = 0; mode < interiorSize; mode += 1) {
+    const modeOffset = mode * interiorSize;
+    for (let sample = 0; sample < interiorSize; sample += 1) {
+      values[modeOffset + sample] = Math.sin(
+        (Math.PI * (mode + 1) * (sample + 1)) / (interiorSize + 1),
+      );
+    }
+  }
+
+  const basis = { values, normalization };
+  sineBasisCache.set(interiorSize, basis);
+  return basis;
 }
 
 function shortestPeriodicDistance(position: number, center: number): number {

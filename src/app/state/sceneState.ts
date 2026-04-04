@@ -51,6 +51,7 @@ export interface SceneStateV1 {
   readonly mode: AppMode;
   readonly geometry: Geometry;
   readonly quantity: SceneQuantity;
+  readonly circleLayout?: 'radial' | 'longitudinal';
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
@@ -148,6 +149,7 @@ export function parseSceneState(search: string): SceneStateV1 | null {
             CLASSICAL_1D_QUANTITIES,
             'displacement',
           ),
+          circleLayout: coerceEnum(parsed.circleLayout, ['radial', 'longitudinal'] as const, 'radial'),
           playing,
           speed,
           showLattice,

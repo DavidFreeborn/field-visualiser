@@ -127,6 +127,7 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
           mode,
           geometry,
           quantity: classicalController.quantity,
+          circleLayout: classicalController.circleLayout,
           playing: classicalController.playing,
           speed: classicalController.speed,
           showLattice: classicalController.showLattice,
@@ -222,6 +223,7 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
   }, [
     mode,
     geometry,
+    classicalController.circleLayout,
     classicalController.config,
     classicalController.playing,
     classicalController.quantity,
@@ -315,6 +317,7 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
             mode={mode}
             playing={classical1DBranch.playing}
             quantity={classical1DBranch.quantity}
+            circleLayout={classicalController.circleLayout}
             showLattice={classical1DBranch.showLattice}
             showSprings={classical1DBranch.showSprings}
             speed={classical1DBranch.speed}
@@ -323,6 +326,7 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
             onGeometryChange={(next) => handleGeometryChange(next)}
             onPlayingChange={classical1DBranch.setPlaying}
             onQuantityChange={classical1DBranch.setQuantity}
+            onCircleLayoutChange={classicalController.setCircleLayout}
             onReset={classical1DBranch.reset}
             onShowLatticeChange={classical1DBranch.setShowLattice}
             onShowSpringsChange={classical1DBranch.setShowSprings}
@@ -369,6 +373,13 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
           />
         )}
         <PrototypeCanvas
+          circleLayout={
+            mode === 'classical' &&
+            geometry === 'periodic-circle' &&
+            activeController.quantity === 'displacement'
+              ? classicalController.circleLayout
+              : 'radial'
+          }
           quantity={activeController.quantity}
           showLattice={activeController.showLattice}
           showSprings={
@@ -415,6 +426,7 @@ function applySceneState(
       controllers.classicalController.setQuantity(
         scene.quantity as typeof controllers.classicalController.quantity,
       );
+      controllers.classicalController.setCircleLayout(scene.circleLayout ?? 'radial');
       controllers.classicalController.setPlaying(scene.playing);
       controllers.classicalController.setSpeed(scene.speed);
       controllers.classicalController.setShowLattice(scene.showLattice);

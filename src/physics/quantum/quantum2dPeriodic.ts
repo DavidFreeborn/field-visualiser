@@ -1,6 +1,7 @@
 import { flattenIndex2D } from '../core/grids';
 import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
 import { computeDiscreteNorm } from './initialStates';
+import type { Quantum2DDisplaySnapshot } from './quantum2dDisplay';
 import {
   createPeriodicQuantumInitialState2D,
   discreteFourierTransform2D,
@@ -66,6 +67,8 @@ export class Quantum2DPeriodicEngine
   private time = 0;
   private spacing = 1;
   private modeFrequencies = new Float64Array(0);
+  private initialModeReal = new Float64Array(0);
+  private initialModeImaginary = new Float64Array(0);
   private modeReal = new Float64Array(0);
   private modeImaginary = new Float64Array(0);
   private siteReal = new Float64Array(0);
@@ -113,6 +116,8 @@ export class Quantum2DPeriodicEngine
       this.modeReal,
       this.modeImaginary,
     );
+    this.initialModeReal = new Float64Array(this.modeReal);
+    this.initialModeImaginary = new Float64Array(this.modeImaginary);
   }
 
   public step(dt: number): void {
@@ -120,18 +125,24 @@ export class Quantum2DPeriodicEngine
       return;
     }
 
-    for (let index = 0; index < this.modeReal.length; index += 1) {
-      const phase = -this.modeFrequencies[index] * dt;
-      const cosPhase = Math.cos(phase);
-      const sinPhase = Math.sin(phase);
-      const real = this.modeReal[index];
-      const imaginary = this.modeImaginary[index];
-      this.modeReal[index] = real * cosPhase - imaginary * sinPhase;
-      this.modeImaginary[index] = real * sinPhase + imaginary * cosPhase;
-    }
+    this.setTime(this.time + dt);
+  }
 
+  public setTime(time: number): void {
     if (this.config === null) {
       throw new Error('Engine has not been initialised.');
+    }
+
+    this.time = Math.max(0, time);
+
+    for (let index = 0; index < this.modeReal.length; index += 1) {
+      const phase = -this.modeFrequencies[index] * this.time;
+      const cosPhase = Math.cos(phase);
+      const sinPhase = Math.sin(phase);
+      const real = this.initialModeReal[index];
+      const imaginary = this.initialModeImaginary[index];
+      this.modeReal[index] = real * cosPhase - imaginary * sinPhase;
+      this.modeImaginary[index] = real * sinPhase + imaginary * cosPhase;
     }
 
     inverseDiscreteFourierTransform2D(
@@ -141,7 +152,6 @@ export class Quantum2DPeriodicEngine
       this.siteReal,
       this.siteImaginary,
     );
-    this.time += dt;
   }
 
   public getSnapshot(
@@ -200,6 +210,53 @@ export class Quantum2DPeriodicEngine
       stabilityRatio: 1,
       totalNorm,
       normError: Math.abs(totalNorm - 1),
+    };
+  }
+
+  public getDisplaySnapshot(
+    quantity: Quantum2DPeriodicQuantity = 'probability-density',
+  ): Quantum2DDisplaySnapshot {
+    if (this.config === null) {
+      throw new Error('Engine has not been initialised.');
+    }
+
+    const displayValues = new Float32Array(this.siteReal.length);
+
+    for (let index = 0; index < this.siteReal.length; index += 1) {
+      switch (quantity) {
+        case 'real-part':
+          displayValues[index] = this.siteReal[index];
+          break;
+        case 'imaginary-part':
+          displayValues[index] = this.siteImaginary[index];
+          break;
+        case 'magnitude':
+          displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+          break;
+        case 'probability-density':
+        default:
+          displayValues[index] =
+            this.siteReal[index] * this.siteReal[index] +
+            this.siteImaginary[index] * this.siteImaginary[index];
+          break;
+      }
+    }
+
+    return {
+      kind: 'quantum-2d-display',
+      sourceKind: 'quantum-2d-periodic',
+      time: this.time,
+      systemLabel: '2D torus',
+      boundaryCondition: 'periodic',
+      modeLabel: 'free-field one-particle',
+      quantity,
+      width: this.config.size,
+      height: this.config.size,
+      domainLength: this.config.domainLength,
+      spacing: this.spacing,
+      geometry: 'torus-periodic',
+      displayValues,
+      totalNorm: computeDiscreteNorm(this.siteReal, this.siteImaginary),
     };
   }
 }

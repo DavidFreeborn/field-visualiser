@@ -79,4 +79,31 @@ describe('sceneState', () => {
       },
     });
   });
+
+  it('round-trips the periodic circle layout toggle when present', () => {
+    const scene: SceneStateV1 = {
+      v: 1,
+      mode: 'classical',
+      geometry: 'periodic-circle',
+      quantity: 'displacement',
+      circleLayout: 'longitudinal',
+      playing: false,
+      speed: 1,
+      showLattice: true,
+      showSprings: true,
+      config: {
+        siteCount: 128,
+        waveSpeed: 1,
+        domainLength: 1,
+        amplitude: 0.9,
+        initialCenter: 0.5,
+        gaussianWidth: 0.06,
+        initialPreset: 'gaussian-displacement',
+      },
+    };
+
+    const search = buildSceneSearch(scene, '', { preserveEmbed: false });
+
+    expect(parseSceneState(search)).toEqual(scene);
+  });
 });

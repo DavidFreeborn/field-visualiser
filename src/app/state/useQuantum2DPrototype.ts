@@ -1,28 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { defaultQuantum2DSquareConfig } from '../presets/quantum2dSquare';
 import { defaultQuantum2DTorusConfig } from '../presets/quantum2dTorus';
-import { advanceSimulationClock } from './simulationClock';
 import {
   Quantum2DFixedEngine,
   type Quantum2DFixedConfig,
-  type Quantum2DFixedDiagnostics,
-  type Quantum2DFixedQuantity,
-  type Quantum2DFixedSnapshot,
 } from '../../physics/quantum/quantum2dFixed';
 import {
   Quantum2DPeriodicEngine,
   type Quantum2DPeriodicConfig,
-  type Quantum2DPeriodicDiagnostics,
-  type Quantum2DPeriodicQuantity,
-  type Quantum2DPeriodicSnapshot,
 } from '../../physics/quantum/quantum2dPeriodic';
 import type { Quantum2DInitialPreset } from '../../physics/quantum/initialStates2d';
+import type {
+  Quantum2DConfig,
+  Quantum2DDiagnostics,
+  Quantum2DGeometry,
+  Quantum2DQuantity,
+  Quantum2DSnapshot,
+  Quantum2DWorkerResponse,
+} from '../workers/quantum2DProtocol';
 
-type Quantum2DGeometry = 'square-fixed' | 'torus-periodic';
-type Quantum2DConfig = Quantum2DFixedConfig | Quantum2DPeriodicConfig;
-type Quantum2DQuantity = Quantum2DFixedQuantity | Quantum2DPeriodicQuantity;
-type Quantum2DSnapshot = Quantum2DFixedSnapshot | Quantum2DPeriodicSnapshot;
-type Quantum2DDiagnostics = Quantum2DFixedDiagnostics | Quantum2DPeriodicDiagnostics;
+type WorkerBackedEngine = (Quantum2DFixedEngine | Quantum2DPeriodicEngine) & {
+  setTime(time: number): void;
+};
 
 interface Quantum2DControllerState {
   readonly config: Quantum2DConfig;
@@ -50,19 +49,38 @@ export function useQuantum2DPrototype(
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [showLattice, setShowLattice] = useState(false);
-  const engineRef = useRef(
+  const [executionMode, setExecutionMode] = useState<'worker' | 'local'>(
+    typeof Worker === 'undefined' ? 'local' : 'worker',
+  );
+
+  const localEngineRef = useRef<WorkerBackedEngine>(
     geometry === 'square-fixed'
       ? new Quantum2DFixedEngine(defaultQuantum2DSquareConfig)
       : new Quantum2DPeriodicEngine(defaultQuantum2DTorusConfig),
   );
-  const carrySecondsRef = useRef(0);
+  const workerRef = useRef<Worker | null>(null);
+  const simulatedTimeRef = useRef(0);
+  const pendingElapsedRef = useRef(0);
+  const workerAdvanceInFlightRef = useRef(false);
+  const playingRef = useRef(playing);
+  const activeRef = useRef(active);
+  const speedRef = useRef(speed);
   const quantityRef = useRef<Quantum2DQuantity>('probability-density');
+  const configRef = useRef<Quantum2DConfig>(config);
+  const geometryRef = useRef<Quantum2DGeometry>(geometry);
   const [snapshot, setSnapshot] = useState<Quantum2DSnapshot>(() =>
-    engineRef.current.getSnapshot(quantity),
+    localEngineRef.current.getDisplaySnapshot(quantity),
   );
   const [diagnostics, setDiagnostics] = useState<Quantum2DDiagnostics>(() =>
-    engineRef.current.getDiagnostics(),
+    localEngineRef.current.getDiagnostics(),
   );
+
+  playingRef.current = playing;
+  activeRef.current = active;
+  speedRef.current = speed;
+  quantityRef.current = quantity;
+  configRef.current = config;
+  geometryRef.current = geometry;
 
   useEffect(() => {
     const nextConfig = getDefaultConfig(geometry);
@@ -81,21 +99,127 @@ export function useQuantum2DPrototype(
     }));
   }, [geometry]);
 
+  const tryDispatchWorkerAdvance = useEffectEvent(() => {
+    if (
+      executionMode !== 'worker' ||
+      workerRef.current === null ||
+      workerAdvanceInFlightRef.current ||
+      pendingElapsedRef.current <= 0
+    ) {
+      return;
+    }
+
+    const elapsedSeconds = pendingElapsedRef.current;
+    pendingElapsedRef.current = 0;
+    workerAdvanceInFlightRef.current = true;
+    workerRef.current.postMessage({
+      type: 'advance',
+      elapsedSeconds,
+      speed: speedRef.current,
+    });
+  });
+
+  const fallbackToLocalMode = useEffectEvent(() => {
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    workerAdvanceInFlightRef.current = false;
+    pendingElapsedRef.current = 0;
+    setExecutionMode('local');
+    localEngineRef.current =
+      geometryRef.current === 'square-fixed'
+        ? new Quantum2DFixedEngine(configRef.current as Quantum2DFixedConfig)
+        : new Quantum2DPeriodicEngine(configRef.current as Quantum2DPeriodicConfig);
+    simulatedTimeRef.current = snapshot.time;
+    localEngineRef.current.setTime(simulatedTimeRef.current);
+    setSnapshot(localEngineRef.current.getDisplaySnapshot(quantityRef.current));
+    setDiagnostics(localEngineRef.current.getDiagnostics());
+  });
+
   useEffect(() => {
-    engineRef.current =
+    if (executionMode !== 'worker') {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    try {
+      const worker = new Worker(new URL('../workers/quantum2D.worker.ts', import.meta.url), {
+        type: 'module',
+      });
+      workerRef.current = worker;
+      workerAdvanceInFlightRef.current = false;
+      pendingElapsedRef.current = 0;
+      simulatedTimeRef.current = 0;
+
+      worker.onmessage = (event: MessageEvent<Quantum2DWorkerResponse>) => {
+        if (disposed) {
+          return;
+        }
+
+        if (event.data.type === 'error') {
+          fallbackToLocalMode();
+          return;
+        }
+
+        workerAdvanceInFlightRef.current = false;
+        setSnapshot(event.data.snapshot);
+        setDiagnostics(event.data.diagnostics);
+        if (activeRef.current && playingRef.current) {
+          tryDispatchWorkerAdvance();
+        }
+      };
+
+      worker.onerror = () => {
+        if (!disposed) {
+          fallbackToLocalMode();
+        }
+      };
+
+      worker.postMessage({
+        type: 'configure',
+        geometry,
+        config,
+        quantity: quantityRef.current,
+      });
+    } catch {
+      fallbackToLocalMode();
+    }
+
+    return () => {
+      disposed = true;
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      workerAdvanceInFlightRef.current = false;
+      pendingElapsedRef.current = 0;
+    };
+  }, [config, executionMode, fallbackToLocalMode, geometry, tryDispatchWorkerAdvance]);
+
+  useEffect(() => {
+    if (executionMode === 'worker') {
+      return;
+    }
+
+    localEngineRef.current =
       geometry === 'square-fixed'
         ? new Quantum2DFixedEngine(config as Quantum2DFixedConfig)
         : new Quantum2DPeriodicEngine(config as Quantum2DPeriodicConfig);
-    carrySecondsRef.current = 0;
-    setSnapshot(engineRef.current.getSnapshot(quantityRef.current));
-    setDiagnostics(engineRef.current.getDiagnostics());
-  }, [config, geometry]);
+    simulatedTimeRef.current = 0;
+    setSnapshot(localEngineRef.current.getDisplaySnapshot(quantityRef.current));
+    setDiagnostics(localEngineRef.current.getDiagnostics());
+  }, [config, executionMode, geometry]);
 
   useEffect(() => {
-    quantityRef.current = quantity;
-    setSnapshot(engineRef.current.getSnapshot(quantity));
-    setDiagnostics(engineRef.current.getDiagnostics());
-  }, [quantity]);
+    if (executionMode === 'worker') {
+      workerRef.current?.postMessage({
+        type: 'set-quantity',
+        quantity,
+      });
+      return;
+    }
+
+    setSnapshot(localEngineRef.current.getDisplaySnapshot(quantity));
+    setDiagnostics(localEngineRef.current.getDiagnostics());
+  }, [executionMode, quantity]);
 
   useEffect(() => {
     if (!active || !playing) {
@@ -113,17 +237,16 @@ export function useQuantum2DPrototype(
       const elapsedSeconds = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
 
-      const clockState = advanceSimulationClock(
-        engineRef.current,
-        elapsedSeconds,
-        speed,
-        carrySecondsRef.current,
-      );
-      carrySecondsRef.current = clockState.carrySeconds;
-
-      if (clockState.consumedSubsteps > 0) {
-        setSnapshot(engineRef.current.getSnapshot(quantity));
-        setDiagnostics(engineRef.current.getDiagnostics());
+      if (executionMode === 'worker') {
+        pendingElapsedRef.current += elapsedSeconds;
+        tryDispatchWorkerAdvance();
+      } else {
+        if (elapsedSeconds > 0) {
+          simulatedTimeRef.current += elapsedSeconds * speed;
+          localEngineRef.current.setTime(simulatedTimeRef.current);
+          setSnapshot(localEngineRef.current.getDisplaySnapshot(quantityRef.current));
+          setDiagnostics(localEngineRef.current.getDiagnostics());
+        }
       }
 
       frameId = window.requestAnimationFrame(renderFrame);
@@ -131,7 +254,7 @@ export function useQuantum2DPrototype(
 
     frameId = window.requestAnimationFrame(renderFrame);
     return () => window.cancelAnimationFrame(frameId);
-  }, [active, playing, quantity, speed]);
+  }, [active, executionMode, playing, speed, tryDispatchWorkerAdvance]);
 
   return {
     config,
@@ -147,20 +270,39 @@ export function useQuantum2DPrototype(
     setSpeed,
     setShowLattice,
     reset: () => {
-      engineRef.current =
+      if (executionMode === 'worker' && workerRef.current !== null) {
+        pendingElapsedRef.current = 0;
+        workerAdvanceInFlightRef.current = false;
+        workerRef.current.postMessage({
+          type: 'configure',
+          geometry,
+          config,
+          quantity: quantityRef.current,
+        });
+        return;
+      }
+
+      localEngineRef.current =
         geometry === 'square-fixed'
           ? new Quantum2DFixedEngine(config as Quantum2DFixedConfig)
           : new Quantum2DPeriodicEngine(config as Quantum2DPeriodicConfig);
-      carrySecondsRef.current = 0;
-      setSnapshot(engineRef.current.getSnapshot(quantity));
-      setDiagnostics(engineRef.current.getDiagnostics());
+      simulatedTimeRef.current = 0;
+      setSnapshot(localEngineRef.current.getDisplaySnapshot(quantity));
+      setDiagnostics(localEngineRef.current.getDiagnostics());
     },
     stepOnce: () => {
-      const nextDt = engineRef.current.getDiagnostics().recommendedDt;
-      engineRef.current.step(nextDt);
-      carrySecondsRef.current = 0;
-      setSnapshot(engineRef.current.getSnapshot(quantity));
-      setDiagnostics(engineRef.current.getDiagnostics());
+      if (executionMode === 'worker' && workerRef.current !== null) {
+        pendingElapsedRef.current = 0;
+        workerAdvanceInFlightRef.current = false;
+        workerRef.current.postMessage({ type: 'step-once' });
+        return;
+      }
+
+      const nextDt = localEngineRef.current.getDiagnostics().recommendedDt;
+      localEngineRef.current.step(nextDt);
+      simulatedTimeRef.current += nextDt;
+      setSnapshot(localEngineRef.current.getDisplaySnapshot(quantity));
+      setDiagnostics(localEngineRef.current.getDiagnostics());
     },
   };
 }

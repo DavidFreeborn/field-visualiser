@@ -71,9 +71,6 @@ export function Classical2DControls({
   return (
     <section className="control-panel">
       <div className="control-header">
-        <div>
-          <p className="eyebrow">Phase 5 Prototype</p>
-        </div>
         <p className="control-note">
           {geometry === 'square-fixed'
             ? 'Nearest-neighbour 2D lattice with fixed zero boundaries on all edges.'

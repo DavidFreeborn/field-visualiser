@@ -11,7 +11,7 @@ export function SimulationShell({
     <main className={`app-shell${embedded ? ' app-shell-embedded' : ''}`}>
       {embedded ? null : (
         <section className="hero-panel">
-          <h1>Visualizing Fields</h1>
+          <h1>Visualising Free Fields</h1>
         </section>
       )}
 

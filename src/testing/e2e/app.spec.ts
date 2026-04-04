@@ -5,7 +5,7 @@ test('loads the application shell', async ({ page }) => {
 
   await expect(
     page.getByRole('heading', {
-      name: /visualizing fields/i,
+      name: /visualising free fields/i,
     }),
   ).toBeVisible();
 
