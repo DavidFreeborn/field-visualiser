@@ -17,7 +17,11 @@ class MockWorker {
     workerMessages.push(message);
 
     const request = message as { type?: string; quantity?: string };
-    if (request.type === 'configure' || request.type === 'set-quantity') {
+    if (
+      request.type === 'configure' ||
+      request.type === 'set-quantity' ||
+      request.type === 'sync-state'
+    ) {
       queueMicrotask(() => {
         this.onmessage?.({
           data: {

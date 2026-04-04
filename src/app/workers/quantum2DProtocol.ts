@@ -33,6 +33,9 @@ export type Quantum2DWorkerRequest =
       readonly speed: number;
     }
   | {
+      readonly type: 'sync-state';
+    }
+  | {
       readonly type: 'step-once';
     };
 

@@ -23,6 +23,8 @@ type WorkerBackedEngine = (Quantum2DFixedEngine | Quantum2DPeriodicEngine) & {
   setTime(time: number): void;
 };
 
+const QUANTUM_WORKER_RENDER_INTERVAL_SECONDS = 1 / 30;
+
 interface Quantum2DControllerState {
   readonly config: Quantum2DConfig;
   readonly quantity: Quantum2DQuantity;
@@ -60,11 +62,8 @@ export function useQuantum2DPrototype(
   );
   const workerRef = useRef<Worker | null>(null);
   const simulatedTimeRef = useRef(0);
-  const pendingElapsedRef = useRef(0);
-  const workerAdvanceInFlightRef = useRef(false);
-  const playingRef = useRef(playing);
-  const activeRef = useRef(active);
-  const speedRef = useRef(speed);
+  const renderElapsedRef = useRef(0);
+  const workerStatePendingRef = useRef(false);
   const quantityRef = useRef<Quantum2DQuantity>('probability-density');
   const configRef = useRef<Quantum2DConfig>(config);
   const geometryRef = useRef<Quantum2DGeometry>(geometry);
@@ -75,9 +74,6 @@ export function useQuantum2DPrototype(
     localEngineRef.current.getDiagnostics(),
   );
 
-  playingRef.current = playing;
-  activeRef.current = active;
-  speedRef.current = speed;
   quantityRef.current = quantity;
   configRef.current = config;
   geometryRef.current = geometry;
@@ -99,31 +95,24 @@ export function useQuantum2DPrototype(
     }));
   }, [geometry]);
 
-  const tryDispatchWorkerAdvance = useEffectEvent(() => {
+  const requestWorkerStateSync = useEffectEvent(() => {
     if (
       executionMode !== 'worker' ||
       workerRef.current === null ||
-      workerAdvanceInFlightRef.current ||
-      pendingElapsedRef.current <= 0
+      workerStatePendingRef.current
     ) {
       return;
     }
 
-    const elapsedSeconds = pendingElapsedRef.current;
-    pendingElapsedRef.current = 0;
-    workerAdvanceInFlightRef.current = true;
-    workerRef.current.postMessage({
-      type: 'advance',
-      elapsedSeconds,
-      speed: speedRef.current,
-    });
+    workerStatePendingRef.current = true;
+    workerRef.current.postMessage({ type: 'sync-state' });
   });
 
   const fallbackToLocalMode = useEffectEvent(() => {
     workerRef.current?.terminate();
     workerRef.current = null;
-    workerAdvanceInFlightRef.current = false;
-    pendingElapsedRef.current = 0;
+    workerStatePendingRef.current = false;
+    renderElapsedRef.current = 0;
     setExecutionMode('local');
     localEngineRef.current =
       geometryRef.current === 'square-fixed'
@@ -147,8 +136,8 @@ export function useQuantum2DPrototype(
         type: 'module',
       });
       workerRef.current = worker;
-      workerAdvanceInFlightRef.current = false;
-      pendingElapsedRef.current = 0;
+      workerStatePendingRef.current = false;
+      renderElapsedRef.current = 0;
       simulatedTimeRef.current = 0;
 
       worker.onmessage = (event: MessageEvent<Quantum2DWorkerResponse>) => {
@@ -161,12 +150,9 @@ export function useQuantum2DPrototype(
           return;
         }
 
-        workerAdvanceInFlightRef.current = false;
+        workerStatePendingRef.current = false;
         setSnapshot(event.data.snapshot);
         setDiagnostics(event.data.diagnostics);
-        if (activeRef.current && playingRef.current) {
-          tryDispatchWorkerAdvance();
-        }
       };
 
       worker.onerror = () => {
@@ -189,10 +175,10 @@ export function useQuantum2DPrototype(
       disposed = true;
       workerRef.current?.terminate();
       workerRef.current = null;
-      workerAdvanceInFlightRef.current = false;
-      pendingElapsedRef.current = 0;
+      workerStatePendingRef.current = false;
+      renderElapsedRef.current = 0;
     };
-  }, [config, executionMode, fallbackToLocalMode, geometry, tryDispatchWorkerAdvance]);
+  }, [config, executionMode, fallbackToLocalMode, geometry]);
 
   useEffect(() => {
     if (executionMode === 'worker') {
@@ -238,8 +224,20 @@ export function useQuantum2DPrototype(
       lastTimestamp = timestamp;
 
       if (executionMode === 'worker') {
-        pendingElapsedRef.current += elapsedSeconds;
-        tryDispatchWorkerAdvance();
+        if (elapsedSeconds > 0) {
+          simulatedTimeRef.current += elapsedSeconds * speed;
+          renderElapsedRef.current += elapsedSeconds;
+          workerRef.current?.postMessage({
+            type: 'advance',
+            elapsedSeconds,
+            speed,
+          });
+        }
+
+        if (renderElapsedRef.current >= QUANTUM_WORKER_RENDER_INTERVAL_SECONDS) {
+          renderElapsedRef.current = 0;
+          requestWorkerStateSync();
+        }
       } else {
         if (elapsedSeconds > 0) {
           simulatedTimeRef.current += elapsedSeconds * speed;
@@ -254,7 +252,7 @@ export function useQuantum2DPrototype(
 
     frameId = window.requestAnimationFrame(renderFrame);
     return () => window.cancelAnimationFrame(frameId);
-  }, [active, executionMode, playing, speed, tryDispatchWorkerAdvance]);
+  }, [active, executionMode, playing, requestWorkerStateSync, speed]);
 
   return {
     config,
@@ -271,8 +269,8 @@ export function useQuantum2DPrototype(
     setShowLattice,
     reset: () => {
       if (executionMode === 'worker' && workerRef.current !== null) {
-        pendingElapsedRef.current = 0;
-        workerAdvanceInFlightRef.current = false;
+        renderElapsedRef.current = 0;
+        workerStatePendingRef.current = false;
         workerRef.current.postMessage({
           type: 'configure',
           geometry,
@@ -292,8 +290,8 @@ export function useQuantum2DPrototype(
     },
     stepOnce: () => {
       if (executionMode === 'worker' && workerRef.current !== null) {
-        pendingElapsedRef.current = 0;
-        workerAdvanceInFlightRef.current = false;
+        renderElapsedRef.current = 0;
+        workerStatePendingRef.current = false;
         workerRef.current.postMessage({ type: 'step-once' });
         return;
       }

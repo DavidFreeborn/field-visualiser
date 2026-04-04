@@ -49,11 +49,12 @@ function handleMessage(message: Quantum2DWorkerRequest): void {
       const configuredEngine = ensureEngine();
       simulatedTime += message.elapsedSeconds * message.speed;
       configuredEngine.setTime(simulatedTime);
-      if (message.elapsedSeconds > 0) {
-        postCurrentState();
-      }
       return;
     }
+    case 'sync-state':
+      ensureEngine();
+      postCurrentState();
+      return;
     case 'step-once': {
       const stepEngine = ensureEngine();
       stepEngine.step(stepEngine.getDiagnostics().recommendedDt);
