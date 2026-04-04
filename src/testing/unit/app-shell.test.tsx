@@ -38,9 +38,9 @@ describe('App', () => {
       }),
     ).toBeInTheDocument();
 
-    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound/i)).toBeInTheDocument();
+    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Classical field')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Periodic circle')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Periodic circle, deforming')).toBeInTheDocument();
   });
 
   it('switches to the quantum one-particle controls', async () => {
@@ -53,8 +53,22 @@ describe('App', () => {
       'quantum-one-particle',
     );
 
-    expect(screen.getByText(/free-field one-particle evolution on the periodic lattice hilbert space/i)).toBeInTheDocument();
+    expect(screen.getByText(/free-field one-particle evolution on the periodic lattice hilbert space, shown on a deforming circular embedding/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Probability density')).toBeInTheDocument();
+  });
+
+  it('switches to the fixed-ring periodic circle controls', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'periodic-circle-fixed');
+
+    expect(
+      screen.getByText(/shown on a fixed circular domain with color encoding/i),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Periodic circle, fixed ring')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/circle motion/i)).not.toBeInTheDocument();
   });
 
   it('switches to the fixed-end interval controls', async () => {
@@ -120,7 +134,7 @@ describe('App', () => {
         name: /visualising free fields/i,
       }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound/i)).toBeInTheDocument();
+    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i)).toBeInTheDocument();
   });
 
   it('restores a valid shared scene from the URL', async () => {
@@ -166,9 +180,9 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound/i)).toBeInTheDocument();
+    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Classical field')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Periodic circle')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Periodic circle, deforming')).toBeInTheDocument();
   });
 
   it('does not remount the canvas during URL-driven scene restoration', async () => {

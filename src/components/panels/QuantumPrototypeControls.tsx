@@ -58,8 +58,10 @@ export function QuantumPrototypeControls({
       <div className="control-header">
         <p className="control-note">
           {geometry === 'periodic-circle'
-            ? 'Free-field one-particle evolution on the periodic lattice Hilbert space, shown on a circular domain.'
-            : 'Free-field one-particle evolution on a fixed-end interval with zero endpoint amplitudes.'}
+            ? 'Free-field one-particle evolution on the periodic lattice Hilbert space, shown on a deforming circular embedding.'
+            : geometry === 'periodic-circle-fixed'
+              ? 'Free-field one-particle evolution on the periodic lattice Hilbert space, shown on a fixed circular domain with color encoding.'
+              : 'Free-field one-particle evolution on a fixed-end interval with zero endpoint amplitudes.'}
         </p>
       </div>
 

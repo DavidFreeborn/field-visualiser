@@ -68,14 +68,14 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
 
   const activeController =
     mode === 'classical'
-      ? geometry === 'periodic-circle'
+      ? isPeriodicCircleGeometry(geometry)
         ? classicalController
         : geometry === 'fixed-interval'
           ? fixedClassicalController
           : geometry === 'square-fixed'
             ? square2DController
             : torus2DController
-      : geometry === 'periodic-circle'
+      : isPeriodicCircleGeometry(geometry)
         ? quantumController
         : geometry === 'fixed-interval'
           ? fixedQuantumController
@@ -134,6 +134,18 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
           showSprings: classicalController.showSprings,
           config: classicalController.config,
         };
+      case 'classical:periodic-circle-fixed':
+        return {
+          v: 1,
+          mode,
+          geometry,
+          quantity: classicalController.quantity,
+          playing: classicalController.playing,
+          speed: classicalController.speed,
+          showLattice: classicalController.showLattice,
+          showSprings: classicalController.showSprings,
+          config: classicalController.config,
+        };
       case 'classical:fixed-interval':
         return {
           v: 1,
@@ -171,6 +183,18 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
           config: torus2DController.config,
         };
       case 'quantum-one-particle:periodic-circle':
+        return {
+          v: 1,
+          mode,
+          geometry,
+          quantity: quantumController.quantity,
+          playing: quantumController.playing,
+          speed: quantumController.speed,
+          showLattice: quantumController.showLattice,
+          showSprings: false,
+          config: quantumController.config,
+        };
+      case 'quantum-one-particle:periodic-circle-fixed':
         return {
           v: 1,
           mode,
@@ -380,11 +404,12 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
               ? classicalController.circleLayout
               : 'radial'
           }
+          circleGeometryMode={geometry === 'periodic-circle-fixed' ? 'fixed' : 'deformed'}
           quantity={activeController.quantity}
           showLattice={activeController.showLattice}
           showSprings={
             mode === 'classical'
-              ? geometry === 'periodic-circle'
+              ? isPeriodicCircleGeometry(geometry)
                 ? classicalController.showSprings
                 : geometry === 'fixed-interval'
                   ? fixedClassicalController.showSprings
@@ -400,6 +425,10 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
 
 function isGeometry2D(geometry: Geometry): geometry is Geometry2D {
   return geometry === 'square-fixed' || geometry === 'torus-periodic';
+}
+
+function isPeriodicCircleGeometry(geometry: Geometry): geometry is 'periodic-circle' | 'periodic-circle-fixed' {
+  return geometry === 'periodic-circle' || geometry === 'periodic-circle-fixed';
 }
 
 function applySceneState(
@@ -427,6 +456,16 @@ function applySceneState(
         scene.quantity as typeof controllers.classicalController.quantity,
       );
       controllers.classicalController.setCircleLayout(scene.circleLayout ?? 'radial');
+      controllers.classicalController.setPlaying(scene.playing);
+      controllers.classicalController.setSpeed(scene.speed);
+      controllers.classicalController.setShowLattice(scene.showLattice);
+      controllers.classicalController.setShowSprings(scene.showSprings);
+      break;
+    case 'classical:periodic-circle-fixed':
+      controllers.classicalController.setConfig(scene.config as typeof defaultClassical1DPeriodicConfig);
+      controllers.classicalController.setQuantity(
+        scene.quantity as typeof controllers.classicalController.quantity,
+      );
       controllers.classicalController.setPlaying(scene.playing);
       controllers.classicalController.setSpeed(scene.speed);
       controllers.classicalController.setShowLattice(scene.showLattice);
@@ -461,6 +500,15 @@ function applySceneState(
       controllers.torus2DController.setShowLattice(scene.showLattice);
       break;
     case 'quantum-one-particle:periodic-circle':
+      controllers.quantumController.setConfig(scene.config as typeof defaultQuantum1DPeriodicConfig);
+      controllers.quantumController.setQuantity(
+        scene.quantity as typeof controllers.quantumController.quantity,
+      );
+      controllers.quantumController.setPlaying(scene.playing);
+      controllers.quantumController.setSpeed(scene.speed);
+      controllers.quantumController.setShowLattice(scene.showLattice);
+      break;
+    case 'quantum-one-particle:periodic-circle-fixed':
       controllers.quantumController.setConfig(scene.config as typeof defaultQuantum1DPeriodicConfig);
       controllers.quantumController.setQuantity(
         scene.quantity as typeof controllers.quantumController.quantity,

@@ -62,6 +62,7 @@ export interface SceneStateV1 {
 const VALID_MODES: readonly AppMode[] = ['classical', 'quantum-one-particle'];
 const VALID_GEOMETRIES: readonly Geometry[] = [
   'periodic-circle',
+  'periodic-circle-fixed',
   'fixed-interval',
   'square-fixed',
   'torus-periodic',
@@ -156,6 +157,22 @@ export function parseSceneState(search: string): SceneStateV1 | null {
           showSprings,
           config: sanitizeClassical1DPeriodicConfig(configRecord),
         };
+      case 'classical:periodic-circle-fixed':
+        return {
+          v: 1,
+          mode,
+          geometry,
+          quantity: coerceEnum(
+            parsed.quantity,
+            CLASSICAL_1D_QUANTITIES,
+            'displacement',
+          ),
+          playing,
+          speed,
+          showLattice,
+          showSprings,
+          config: sanitizeClassical1DPeriodicConfig(configRecord),
+        };
       case 'classical:fixed-interval':
         return {
           v: 1,
@@ -205,6 +222,22 @@ export function parseSceneState(search: string): SceneStateV1 | null {
           config: sanitizeClassical2DConfig(configRecord, defaultClassical2DTorusConfig),
         };
       case 'quantum-one-particle:periodic-circle':
+        return {
+          v: 1,
+          mode,
+          geometry,
+          quantity: coerceEnum(
+            parsed.quantity,
+            QUANTUM_1D_QUANTITIES,
+            'probability-density',
+          ),
+          playing,
+          speed,
+          showLattice,
+          showSprings: false,
+          config: sanitizeQuantum1DPeriodicConfig(configRecord),
+        };
+      case 'quantum-one-particle:periodic-circle-fixed':
         return {
           v: 1,
           mode,
@@ -465,14 +498,29 @@ function sanitizeQuantum2DConfig(
 
 function getDefaultShowLattice(mode: AppMode, geometry: Geometry): boolean {
   if (mode === 'classical') {
-    return geometry === 'periodic-circle' || geometry === 'fixed-interval';
+    return (
+      geometry === 'periodic-circle' ||
+      geometry === 'periodic-circle-fixed' ||
+      geometry === 'fixed-interval'
+    );
   }
 
-  return geometry === 'periodic-circle' || geometry === 'fixed-interval';
+  return (
+    geometry === 'periodic-circle' ||
+    geometry === 'periodic-circle-fixed' ||
+    geometry === 'fixed-interval'
+  );
 }
 
 function getDefaultShowSprings(mode: AppMode, geometry: Geometry): boolean {
-  return mode === 'classical' && (geometry === 'periodic-circle' || geometry === 'fixed-interval');
+  return (
+    mode === 'classical' &&
+    (
+      geometry === 'periodic-circle' ||
+      geometry === 'periodic-circle-fixed' ||
+      geometry === 'fixed-interval'
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

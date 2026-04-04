@@ -67,8 +67,10 @@ export function PrototypeControls({
       <div className="control-header">
         <p className="control-note">
           {geometry === 'periodic-circle'
-            ? 'Classical nearest-neighbour ring with periodic wraparound, shown directly as a circle.'
-            : 'Classical nearest-neighbour line with fixed zero endpoints.'}
+            ? 'Classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding.'
+            : geometry === 'periodic-circle-fixed'
+              ? 'Classical nearest-neighbour ring with periodic wraparound, shown on a fixed circular domain with color encoding.'
+              : 'Classical nearest-neighbour line with fixed zero endpoints.'}
         </p>
       </div>
 

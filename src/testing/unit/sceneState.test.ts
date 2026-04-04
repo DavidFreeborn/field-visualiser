@@ -106,4 +106,31 @@ describe('sceneState', () => {
 
     expect(parseSceneState(search)).toEqual(scene);
   });
+
+  it('round-trips the fixed-ring periodic circle geometry', () => {
+    const scene: SceneStateV1 = {
+      v: 1,
+      mode: 'quantum-one-particle',
+      geometry: 'periodic-circle-fixed',
+      quantity: 'magnitude',
+      playing: true,
+      speed: 0.8,
+      showLattice: true,
+      showSprings: false,
+      config: {
+        siteCount: 128,
+        waveSpeed: 1,
+        domainLength: 1,
+        initialCenter: 0.5,
+        gaussianWidth: 0.08,
+        momentumWidth: 2,
+        modeNumber: 4,
+        initialPreset: 'gaussian-wavepacket',
+      },
+    };
+
+    const search = buildSceneSearch(scene, '', { preserveEmbed: false });
+
+    expect(parseSceneState(search)).toEqual(scene);
+  });
 });

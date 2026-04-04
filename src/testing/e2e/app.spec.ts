@@ -17,8 +17,15 @@ test('loads the application shell', async ({ page }) => {
   await page.getByLabel('Geometry').selectOption('fixed-interval');
   await expect(page.getByText(/classical nearest-neighbour line with fixed zero endpoints/i)).toBeVisible();
 
+  await page.getByLabel('Geometry').selectOption('periodic-circle-fixed');
+  await expect(
+    page.getByText(/shown on a fixed circular domain with color encoding/i),
+  ).toBeVisible();
+
   await page.getByLabel(/interpretation mode/i).selectOption('quantum-one-particle');
-  await expect(page.getByText(/free-field one-particle evolution on a fixed-end interval/i)).toBeVisible();
+  await expect(
+    page.getByText(/free-field one-particle evolution on the periodic lattice hilbert space, shown on a fixed circular domain with color encoding/i),
+  ).toBeVisible();
 
   await page.getByLabel('Geometry').selectOption('torus-periodic');
   await expect(

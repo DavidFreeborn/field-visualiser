@@ -42,6 +42,7 @@ export interface PeriodicClassicalFieldRendererOptions {
   readonly showLattice: boolean;
   readonly showSprings: boolean;
   readonly circleLayout?: 'radial' | 'longitudinal';
+  readonly circleGeometryMode?: 'deformed' | 'fixed';
   readonly quantity:
     | Classical1DPeriodicQuantity
     | Classical1DFixedQuantity
@@ -323,6 +324,21 @@ export class PeriodicClassicalFieldRenderer {
     bondWidth: number,
     showBondHints: boolean,
   ): void {
+    if (options.circleGeometryMode === 'fixed') {
+      this.renderFixedCircular1D(
+        width,
+        height,
+        values,
+        maxMagnitude,
+        useSequentialMap,
+        options,
+        siteRadius,
+        bondWidth,
+        showBondHints,
+      );
+      return;
+    }
+
     const centerX = width / 2;
     const centerY = height / 2;
     const baseRadius = Math.max(32, Math.min(width, height) * 0.29);
@@ -402,6 +418,78 @@ export class PeriodicClassicalFieldRenderer {
         color: 0x18222c,
         alpha: 0.95,
       });
+    }
+  }
+
+  private renderFixedCircular1D(
+    width: number,
+    height: number,
+    values: ArrayLike<number>,
+    maxMagnitude: number,
+    useSequentialMap: boolean,
+    options: PeriodicClassicalFieldRendererOptions,
+    siteRadius: number,
+    bondWidth: number,
+    showBondHints: boolean,
+  ): void {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const baseRadius = Math.max(32, Math.min(width, height) * 0.29);
+    const ringWidth = Math.max(6, Math.min(18, Math.min(width, height) * 0.03));
+
+    this.drawChrome(width, height);
+    this.waveform.clear();
+    this.bonds.clear();
+    this.masses.clear();
+
+    this.guides
+      .moveTo(centerX + baseRadius, centerY)
+      .circle(centerX, centerY, baseRadius)
+      .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.45 });
+
+    for (let index = 0; index < values.length; index += 1) {
+      const point = computeCircularGuidePoint(index, values.length, centerX, centerY, baseRadius);
+      const nextPoint = computeCircularGuidePoint(
+        (index + 1) % values.length,
+        values.length,
+        centerX,
+        centerY,
+        baseRadius,
+      );
+      const color = useSequentialMap
+        ? mapDensityToSequentialNumber(values[index], maxMagnitude)
+        : mapSignedValueToDivergingNumber(values[index], maxMagnitude);
+
+      this.waveform
+        .moveTo(point.x, point.y)
+        .lineTo(nextPoint.x, nextPoint.y)
+        .stroke({ width: ringWidth, color, alpha: 0.98, cap: 'round' });
+
+      if (showBondHints) {
+        const innerPoint = computeCircularGuidePoint(
+          index,
+          values.length,
+          centerX,
+          centerY,
+          baseRadius - ringWidth * 0.8,
+        );
+        const nextInnerPoint = computeCircularGuidePoint(
+          (index + 1) % values.length,
+          values.length,
+          centerX,
+          centerY,
+          baseRadius - ringWidth * 0.8,
+        );
+
+        this.bonds
+          .moveTo(innerPoint.x, innerPoint.y)
+          .lineTo(nextInnerPoint.x, nextInnerPoint.y)
+          .stroke({ width: bondWidth, color: 0x5d6772, alpha: 0.24 });
+      }
+
+      if (options.showLattice) {
+        this.masses.circle(point.x, point.y, siteRadius).fill({ color, alpha: 0.95 });
+      }
     }
   }
 
@@ -647,7 +735,7 @@ function computeCircularPoint(
   useSequentialMap: boolean,
   useLongitudinalLayout: boolean,
 ): { x: number; y: number } {
-  const baseAngle = (-Math.PI / 2) + (2 * Math.PI * index) / values.length;
+  const baseAngle = getCircularAngle(index, values.length);
   const normalizedValue = values[index] / maxMagnitude;
 
   if (useLongitudinalLayout) {
@@ -668,6 +756,25 @@ function computeCircularPoint(
     x: centerX + Math.cos(baseAngle) * radius,
     y: centerY + Math.sin(baseAngle) * radius,
   };
+}
+
+function computeCircularGuidePoint(
+  index: number,
+  siteCount: number,
+  centerX: number,
+  centerY: number,
+  radius: number,
+): { x: number; y: number } {
+  const angle = getCircularAngle(index, siteCount);
+
+  return {
+    x: centerX + Math.cos(angle) * radius,
+    y: centerY + Math.sin(angle) * radius,
+  };
+}
+
+function getCircularAngle(index: number, siteCount: number): number {
+  return (-Math.PI / 2) + (2 * Math.PI * index) / siteCount;
 }
 
 function selectHeatmapGrid(

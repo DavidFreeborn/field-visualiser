@@ -41,6 +41,7 @@ interface PrototypeCanvasProps {
   readonly showLattice: boolean;
   readonly showSprings: boolean;
   readonly circleLayout?: 'radial' | 'longitudinal';
+  readonly circleGeometryMode?: 'deformed' | 'fixed';
 }
 
 export function PrototypeCanvas({
@@ -49,6 +50,7 @@ export function PrototypeCanvas({
   showLattice,
   showSprings,
   circleLayout = 'radial',
+  circleGeometryMode = 'deformed',
 }: PrototypeCanvasProps): React.JSX.Element {
   const [rendererStatus, setRendererStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retryNonce, setRetryNonce] = useState(0);
@@ -60,6 +62,7 @@ export function PrototypeCanvas({
     showSprings,
     quantity,
     circleLayout,
+    circleGeometryMode,
   });
   snapshotRef.current = snapshot;
   optionsRef.current = {
@@ -67,6 +70,7 @@ export function PrototypeCanvas({
     showSprings,
     quantity,
     circleLayout,
+    circleGeometryMode,
   };
 
   useEffect(() => {
@@ -130,7 +134,7 @@ export function PrototypeCanvas({
     }
 
     renderer.render(snapshot, optionsRef.current);
-  }, [circleLayout, quantity, showLattice, showSprings, snapshot]);
+  }, [circleGeometryMode, circleLayout, quantity, showLattice, showSprings, snapshot]);
 
   const visualGuide = useMemo(() => getVisualGuide(quantity), [quantity]);
 

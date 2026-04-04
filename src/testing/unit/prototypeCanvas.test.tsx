@@ -36,6 +36,7 @@ vi.mock('../../rendering/pixi/PeriodicClassicalFieldRenderer', () => ({
         showLattice: boolean;
         showSprings: boolean;
         circleLayout?: 'radial' | 'longitudinal';
+        circleGeometryMode?: 'deformed' | 'fixed';
       },
     ): void {
       renderSpy(snapshot, options);
@@ -162,6 +163,7 @@ describe('PrototypeCanvas', () => {
 
     await waitFor(() => {
       expect(renderSpy).toHaveBeenLastCalledWith(nextSnapshot, {
+        circleGeometryMode: 'deformed',
         circleLayout: 'radial',
         quantity: 'velocity',
         showLattice: false,
@@ -229,6 +231,7 @@ describe('PrototypeCanvas', () => {
 
     await waitFor(() => {
       expect(renderSpy).toHaveBeenLastCalledWith(nextSnapshot, {
+        circleGeometryMode: 'deformed',
         circleLayout: 'radial',
         quantity: 'magnitude',
         showLattice: true,
@@ -273,6 +276,32 @@ describe('PrototypeCanvas', () => {
     expect(constructorSpy).toHaveBeenCalledTimes(2);
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+  });
+
+  it('passes the fixed circular geometry mode through to the renderer', async () => {
+    constructorSpy.mockClear();
+    renderSpy.mockClear();
+    initSpy.mockClear();
+
+    render(
+      <PrototypeCanvas
+        quantity="displacement"
+        showLattice
+        showSprings
+        circleGeometryMode="fixed"
+        snapshot={snapshot}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(renderSpy).toHaveBeenCalledWith(snapshot, {
+        circleGeometryMode: 'fixed',
+        circleLayout: 'radial',
+        quantity: 'displacement',
+        showLattice: true,
+        showSprings: true,
+      });
+    });
   });
 
   it('does not duplicate canvases across unmount and remount', async () => {
