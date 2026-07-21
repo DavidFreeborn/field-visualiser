@@ -6,17 +6,89 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
-    <meta
-      name="description"
-      content="Scientifically rigorous field and free-field one-particle visualiser."
-    />
-    <title>Field Visualiser</title>
+    <meta name="description" content="A pedagogical visualiser for waves, boundary conditions, and probability densities in discrete classical and quantum field models." />
+    <link rel="canonical" href="https://www.davidpeterwallisfreeborn.com/fun/field-visualiser/" />
+    <meta property="og:title" content="Classical and Quantum Fields | David Peter Wallis Freeborn" />
+    <meta property="og:description" content="A pedagogical visualiser for waves, boundary conditions, and probability densities in discrete classical and quantum field models." />
+    <meta property="og:url" content="https://www.davidpeterwallisfreeborn.com/fun/field-visualiser/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <title>Classical and Quantum Fields | David Peter Wallis Freeborn</title>
+
+    <!-- Scholarly Instrumental Modernism overrides -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --font-serif: "EB Garamond", Georgia, "Times New Roman", serif;
+        --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --radius: 2px;
+      }
+
+      /* Override bundled React app styles - aggressive reset */
+      #root *, #root *::before, #root *::after {
+        border-radius: 2px !important;
+      }
+
+      /* Typography overrides */
+      #root h1, #root h2, #root h3, #root h4, #root h5, #root h6 {
+        font-family: var(--font-serif) !important;
+        font-weight: 600 !important;
+      }
+
+      #root label, #root button, #root input, #root select, #root p, #root span {
+        font-family: var(--font-sans) !important;
+      }
+
+      /* Remove shadows */
+      #root * {
+        box-shadow: none !important;
+      }
+
+      /* Button styling */
+      #root button {
+        border-radius: 2px !important;
+        text-transform: none !important;
+        font-weight: 500 !important;
+      }
+
+      /* Input and select styling */
+      #root input, #root select {
+        border-radius: 2px !important;
+      }
+
+      /* Plain white background throughout */
+      body {
+        background: #ffffff !important;
+      }
+
+      #root, #root > div, #root > div > div {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+      }
+
+      /* Card/panel styling - plain white backgrounds */
+      #root [class*="card"], #root [class*="Card"],
+      #root [class*="panel"], #root [class*="Panel"],
+      #root [class*="box"], #root [class*="Box"],
+      #root [class*="sidebar"], #root [class*="Sidebar"],
+      #root [class*="control"], #root [class*="Control"],
+      #root [class*="container"], #root [class*="Container"],
+      #root aside, #root nav, #root header, #root section {
+        border-radius: 2px !important;
+        box-shadow: none !important;
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+      }
+    </style>
+
+    <script type="module" crossorigin src="/fun/field-visualiser/assets/index-CXtEFXeQ.js"></script>
+    <link rel="modulepreload" crossorigin href="/fun/field-visualiser/assets/react-vendor-C0Aj5ctX.js">
+    <link rel="modulepreload" crossorigin href="/fun/field-visualiser/assets/pixi-BwRri-hj.js">
+    <link rel="stylesheet" crossorigin href="/fun/field-visualiser/assets/index-D7KKBL2v.css">
   </head>
   <body>
-    <div id="root"></div>
-    <script
-      type="module"
-      src="/src/main.tsx"
-    ></script>
+    <div id="root"></div>
   </body>
 </html>
