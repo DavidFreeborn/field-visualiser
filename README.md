@@ -11,9 +11,9 @@ visualisation of two explicitly documented finite lattice models:
   lattice wavefunction; hbar = 1).
 
 Neither is an exact continuum solver, and the quantum model is not a full
-quantized scalar field theory. The exact equations, invariants, verification
-evidence, and interpretation limits are documented in
-[`PHYSICS_AUDIT.md`](./PHYSICS_AUDIT.md).
+quantized scalar field theory. The exact equations, numerical methods,
+invariants, validation evidence, and interpretation limits are documented in
+[`docs/MODEL.md`](./docs/MODEL.md).
 
 ## Status
 
@@ -92,8 +92,8 @@ The quantum mode evolves a lattice wavefunction under `c sqrt(-Delta_h)` with
 its lattice dispersion (not the continuum `omega = c|k|`). The displayed
 `|psi_i|^2` is a lattice **site probability** (summing to one); a continuum
 probability density would require division by `h^d` under grid refinement.
-See `PHYSICS_AUDIT.md` for the full derivation, verification evidence, and
-interpretation limits.
+See [`docs/MODEL.md`](./docs/MODEL.md) for the full derivation, validation
+evidence, and interpretation limits.
 
 ## Release checklist
 
