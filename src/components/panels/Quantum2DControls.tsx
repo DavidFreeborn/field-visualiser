@@ -134,9 +134,7 @@ export function Quantum2DControls({
                 key={size}
                 value={size}
               >
-                {size === resolutionOptions[resolutionOptions.length - 1]
-                  ? `Almost continuum (${size} × ${size})`
-                  : `${size} × ${size}`}
+                {`${size} × ${size}`}
               </option>
             ))}
           </select>
@@ -147,10 +145,11 @@ export function Quantum2DControls({
             value={quantity}
             onChange={(event) => onQuantityChange(event.target.value as Quantum2DQuantity)}
           >
-            <option value="probability-density">Probability density</option>
-            <option value="magnitude">Magnitude |psi|</option>
+            <option value="probability-density">Site probability |ψᵢ|²</option>
+            <option value="magnitude">Magnitude |ψ|</option>
             <option value="real-part">Real part</option>
             <option value="imaginary-part">Imaginary part</option>
+            <option value="phase-magnitude">Complex amplitude (phase + magnitude)</option>
           </select>
         </label>
         <label>

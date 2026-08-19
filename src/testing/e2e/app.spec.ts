@@ -33,6 +33,22 @@ test('loads the application shell', async ({ page }) => {
   ).toBeVisible();
 });
 
+test('opens periodic 1D as a circle and retains energy density across geometry changes', async ({ page }) => {
+  await page.goto('/');
+
+  // The circle is the default representation for periodic geometries.
+  await expect(page.getByLabel('1D representation')).toHaveValue('ring');
+
+  // Select energy on the ring, hop to the 2D torus and back to the fixed
+  // ring: the quantity must survive both transitions.
+  await page.getByLabel('Quantity').selectOption('energy-density');
+  await page.getByLabel('Geometry').selectOption('torus-periodic');
+  await expect(page.getByLabel('Quantity')).toHaveValue('energy-density');
+
+  await page.getByLabel('Geometry').selectOption('periodic-circle-fixed');
+  await expect(page.getByLabel('Quantity')).toHaveValue('energy-density');
+});
+
 test('restores a shared scene from the URL state', async ({ page }) => {
   const sharedScene = encodeURIComponent(
     JSON.stringify({

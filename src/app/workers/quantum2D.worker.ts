@@ -19,7 +19,8 @@ type WorkerEngine = Quantum2DFixedEngine | Quantum2DPeriodicEngine;
 
 let engine: WorkerEngine | null = null;
 let quantity: Quantum2DQuantity = 'probability-density';
-let simulatedTime = 0;
+let generation = 0;
+let recycledBuffers: ArrayBuffer[] = [];
 
 self.onmessage = (event: MessageEvent<Quantum2DWorkerRequest>): void => {
   try {
@@ -27,39 +28,37 @@ self.onmessage = (event: MessageEvent<Quantum2DWorkerRequest>): void => {
   } catch (error) {
     postMessage({
       type: 'error',
+      generation,
       message: error instanceof Error ? error.message : 'Unknown quantum worker error.',
     } satisfies Quantum2DWorkerResponse);
   }
 };
 
 function handleMessage(message: Quantum2DWorkerRequest): void {
+  // postMessage ordering guarantees mean the latest generation always arrives
+  // last, so simply adopting the incoming generation is safe.
+  generation = message.generation;
+
   switch (message.type) {
     case 'configure':
       engine = createEngine(message.geometry, message.config);
       quantity = message.quantity;
-      simulatedTime = 0;
-      postCurrentState();
+      recycledBuffers = [];
+      postCurrentState(0);
       return;
     case 'set-quantity':
       ensureEngine();
       quantity = message.quantity;
-      postCurrentState();
+      postCurrentState(0);
       return;
-    case 'advance': {
+    case 'set-time': {
       const configuredEngine = ensureEngine();
-      simulatedTime += message.elapsedSeconds * message.speed;
-      configuredEngine.setTime(simulatedTime);
-      return;
-    }
-    case 'sync-state':
-      ensureEngine();
-      postCurrentState();
-      return;
-    case 'step-once': {
-      const stepEngine = ensureEngine();
-      stepEngine.step(stepEngine.getDiagnostics().recommendedDt);
-      simulatedTime += stepEngine.getDiagnostics().recommendedDt;
-      postCurrentState();
+      if (message.recycledBuffers !== undefined) {
+        recycledBuffers = recycledBuffers.concat(message.recycledBuffers).slice(-2);
+      }
+      const computeStart = performance.now();
+      configuredEngine.setTime(message.targetTime);
+      postCurrentState(performance.now() - computeStart);
       return;
     }
   }
@@ -71,14 +70,34 @@ function createEngine(geometry: Quantum2DGeometry, config: Quantum2DConfig): Wor
     : new Quantum2DPeriodicEngine(config as Quantum2DPeriodicConfig);
 }
 
-function postCurrentState(): void {
+function takeRecycledTarget(): Float32Array | undefined {
+  const buffer = recycledBuffers.pop();
+  return buffer !== undefined && buffer.byteLength > 0 ? new Float32Array(buffer) : undefined;
+}
+
+function postCurrentState(computeMs: number): void {
   const activeEngine = ensureEngine();
-  const snapshot = activeEngine.getDisplaySnapshot(quantity);
-  postMessage({
-    type: 'state',
-    snapshot,
-    diagnostics: activeEngine.getDiagnostics(),
-  } satisfies Quantum2DWorkerResponse, [snapshot.displayValues.buffer]);
+  const snapshotStart = performance.now();
+  // Only the phase view consumes an auxiliary buffer; popping one for other
+  // quantities would silently drop it from the recycling pool.
+  const auxTarget = quantity === 'phase-magnitude' ? takeRecycledTarget() : undefined;
+  const snapshot = activeEngine.getDisplaySnapshot(quantity, takeRecycledTarget(), auxTarget);
+  const snapshotMs = performance.now() - snapshotStart;
+
+  const transfer: Transferable[] = [snapshot.displayValues.buffer as ArrayBuffer];
+  if (snapshot.displayValuesAux !== undefined) {
+    transfer.push(snapshot.displayValuesAux.buffer as ArrayBuffer);
+  }
+  postMessage(
+    {
+      type: 'state',
+      generation,
+      snapshot,
+      diagnostics: activeEngine.getDiagnostics(),
+      timings: { computeMs, snapshotMs },
+    } satisfies Quantum2DWorkerResponse,
+    transfer,
+  );
 }
 
 function ensureEngine(): WorkerEngine {

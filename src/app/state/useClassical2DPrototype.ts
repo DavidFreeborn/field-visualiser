@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { defaultClassical2DSquareConfig } from '../presets/classical2dSquare';
 import { advanceSimulationClock } from './simulationClock';
 import {
+  createFrameChannel,
+  DIAGNOSTICS_UPDATE_INTERVAL_SECONDS,
+  PlaybackRateTracker,
+  type FrameChannel,
+} from './frameChannel';
+import {
   Classical2DEngine,
   type Classical2DConfig,
   type Classical2DDiagnostics,
@@ -18,6 +24,9 @@ interface Classical2DControllerState {
   readonly showLattice: boolean;
   readonly snapshot: Classical2DSnapshot;
   readonly diagnostics: Classical2DDiagnostics;
+  readonly frameChannel: FrameChannel<Classical2DSnapshot>;
+  readonly displayTime: number;
+  readonly achievedSpeedRatio: number | null;
   readonly setConfig: (config: Classical2DConfig) => void;
   readonly setQuantity: (quantity: Classical2DQuantity) => void;
   readonly setPlaying: (playing: boolean) => void;
@@ -41,13 +50,20 @@ export function useClassical2DPrototype(
   const [showLattice, setShowLattice] = useState(false);
   const engineRef = useRef(new Classical2DEngine({ ...defaultClassical2DSquareConfig, geometry }));
   const carrySecondsRef = useRef(0);
+  const simulatedTimeRef = useRef(0);
   const quantityRef = useRef<Classical2DQuantity>('displacement');
+  const channelRef = useRef<FrameChannel<Classical2DSnapshot> | null>(null);
+  channelRef.current ??= createFrameChannel<Classical2DSnapshot>();
+  const frameChannel = channelRef.current;
+  const rateTrackerRef = useRef(new PlaybackRateTracker());
   const [snapshot, setSnapshot] = useState<Classical2DSnapshot>(() =>
     engineRef.current.getSnapshot(quantity),
   );
   const [diagnostics, setDiagnostics] = useState<Classical2DDiagnostics>(() =>
     engineRef.current.getDiagnostics(),
   );
+  const [displayTime, setDisplayTime] = useState(0);
+  const [achievedSpeedRatio, setAchievedSpeedRatio] = useState<number | null>(null);
 
   useEffect(() => {
     setConfig((currentConfig) => ({
@@ -67,15 +83,23 @@ export function useClassical2DPrototype(
   useEffect(() => {
     engineRef.current.reset(config);
     carrySecondsRef.current = 0;
-    setSnapshot(engineRef.current.getSnapshot(quantityRef.current));
+    simulatedTimeRef.current = 0;
+    rateTrackerRef.current.reset();
+    const freshSnapshot = engineRef.current.getSnapshot(quantityRef.current);
+    setSnapshot(freshSnapshot);
+    frameChannel.publish(freshSnapshot);
     setDiagnostics(engineRef.current.getDiagnostics());
-  }, [config]);
+    setDisplayTime(0);
+    setAchievedSpeedRatio(null);
+  }, [config, frameChannel]);
 
   useEffect(() => {
     quantityRef.current = quantity;
-    setSnapshot(engineRef.current.getSnapshot(quantity));
+    const freshSnapshot = engineRef.current.getSnapshot(quantity);
+    setSnapshot(freshSnapshot);
+    frameChannel.publish(freshSnapshot);
     setDiagnostics(engineRef.current.getDiagnostics());
-  }, [quantity]);
+  }, [quantity, frameChannel]);
 
   useEffect(() => {
     if (!active || !playing) {
@@ -84,6 +108,8 @@ export function useClassical2DPrototype(
 
     let frameId = 0;
     let lastTimestamp = 0;
+    let diagnosticsElapsed = 0;
+
     const renderFrame = (timestamp: number): void => {
       if (lastTimestamp === 0) {
         lastTimestamp = timestamp;
@@ -97,15 +123,26 @@ export function useClassical2DPrototype(
         carrySecondsRef.current,
       );
       carrySecondsRef.current = clockState.carrySeconds;
+      simulatedTimeRef.current += clockState.simulatedSeconds;
+
       if (clockState.consumedSubsteps > 0) {
-        setSnapshot(engineRef.current.getSnapshot(quantity));
-        setDiagnostics(engineRef.current.getDiagnostics());
+        frameChannel.publish(engineRef.current.getSnapshot(quantityRef.current));
       }
+
+      rateTrackerRef.current.addFrame(elapsedSeconds, clockState.simulatedSeconds);
+      diagnosticsElapsed += elapsedSeconds;
+      if (diagnosticsElapsed >= DIAGNOSTICS_UPDATE_INTERVAL_SECONDS) {
+        diagnosticsElapsed = 0;
+        setDiagnostics(engineRef.current.getDiagnostics());
+        setDisplayTime(simulatedTimeRef.current);
+        setAchievedSpeedRatio(rateTrackerRef.current.sampleAndReset());
+      }
+
       frameId = window.requestAnimationFrame(renderFrame);
     };
     frameId = window.requestAnimationFrame(renderFrame);
     return () => window.cancelAnimationFrame(frameId);
-  }, [active, playing, quantity, speed]);
+  }, [active, playing, speed, frameChannel]);
 
   return {
     config,
@@ -115,6 +152,9 @@ export function useClassical2DPrototype(
     showLattice,
     snapshot,
     diagnostics,
+    frameChannel,
+    displayTime,
+    achievedSpeedRatio,
     setConfig,
     setQuantity,
     setPlaying,
@@ -123,15 +163,26 @@ export function useClassical2DPrototype(
     reset: () => {
       engineRef.current.reset(config);
       carrySecondsRef.current = 0;
-      setSnapshot(engineRef.current.getSnapshot(quantity));
+      simulatedTimeRef.current = 0;
+      rateTrackerRef.current.reset();
+      const freshSnapshot = engineRef.current.getSnapshot(quantity);
+      setSnapshot(freshSnapshot);
+      frameChannel.publish(freshSnapshot);
       setDiagnostics(engineRef.current.getDiagnostics());
+      setDisplayTime(0);
+      setAchievedSpeedRatio(null);
     },
     stepOnce: () => {
+      // Explicit single step: one stable leapfrog step of recommendedDt.
       const nextDt = engineRef.current.getDiagnostics().recommendedDt;
       engineRef.current.step(nextDt);
       carrySecondsRef.current = 0;
-      setSnapshot(engineRef.current.getSnapshot(quantity));
+      simulatedTimeRef.current += nextDt;
+      const freshSnapshot = engineRef.current.getSnapshot(quantity);
+      setSnapshot(freshSnapshot);
+      frameChannel.publish(freshSnapshot);
       setDiagnostics(engineRef.current.getDiagnostics());
+      setDisplayTime(simulatedTimeRef.current);
     },
   };
 }

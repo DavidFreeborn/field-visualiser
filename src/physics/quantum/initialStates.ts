@@ -1,3 +1,5 @@
+import { fastInverseDftUnitary } from '../core/fft';
+
 export type Quantum1DInitialPreset =
   | 'site-localized'
   | 'gaussian-wavepacket'
@@ -109,7 +111,10 @@ function createCounterpropagatingState(
     weightsReal[modeIndex] = weight;
   }
 
-  return inverseDiscreteFourierTransform(weightsReal, weightsImaginary);
+  const real = new Float64Array(siteCount);
+  const imaginary = new Float64Array(siteCount);
+  fastInverseDftUnitary(weightsReal, weightsImaginary, real, imaginary);
+  return { real, imaginary };
 }
 
 export function normalizeState(state: ComplexStateVector): ComplexStateVector {

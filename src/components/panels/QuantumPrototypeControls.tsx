@@ -26,7 +26,16 @@ interface QuantumPrototypeControlsProps {
   readonly onShowLatticeChange: (showLattice: boolean) => void;
 }
 
-const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048] as const;
+const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048];
+
+// The active value may come from a preset or shared URL that is not one of
+// the listed options (e.g. 129 or 513 on the fixed interval); include it so
+// the select always displays the true site count.
+function getResolutionOptions(current: number): number[] {
+  return resolutionOptions.includes(current)
+    ? resolutionOptions
+    : [...resolutionOptions, current].sort((a, b) => a - b);
+}
 
 const initialPresetLabels: Record<Quantum1DInitialPreset, string> = {
   'site-localized': 'Site-localised state',
@@ -110,12 +119,12 @@ export function QuantumPrototypeControls({
               })
             }
           >
-            {resolutionOptions.map((siteCount) => (
+            {getResolutionOptions(config.siteCount).map((siteCount) => (
               <option
                 key={siteCount}
                 value={siteCount}
               >
-                {siteCount === 2048 ? `Almost continuum (${siteCount} sites)` : `${siteCount} sites`}
+                {`${siteCount} sites`}
               </option>
             ))}
           </select>
@@ -131,10 +140,12 @@ export function QuantumPrototypeControls({
               )
             }
           >
-            <option value="probability-density">Probability density</option>
-            <option value="magnitude">Magnitude |psi|</option>
+            <option value="probability-density">Site probability |ψᵢ|²</option>
+            <option value="magnitude">Magnitude |ψ|</option>
             <option value="real-part">Real part</option>
             <option value="imaginary-part">Imaginary part</option>
+            <option value="real-imaginary-parts">Real and imaginary parts</option>
+            <option value="phase-magnitude">Complex amplitude (phase + magnitude)</option>
           </select>
         </label>
 

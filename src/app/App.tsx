@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PrototypeCanvas } from '../components/layout/PrototypeCanvas';
 import { SimulationShell } from '../components/layout/SimulationShell';
 import { Classical2DControls } from '../components/panels/Classical2DControls';
+import { DisplayControls } from '../components/panels/DisplayControls';
+import { StatusStrip } from '../components/panels/StatusStrip';
 import { type AppMode } from '../components/panels/ModeSwitch';
 import { type Geometry, type Geometry1D, type Geometry2D } from '../components/panels/GeometrySwitch';
 import { PrototypeControls } from '../components/panels/PrototypeControls';
@@ -33,6 +35,13 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
   );
   const [mode, setMode] = useState<AppMode>(initialSceneRef.current?.mode ?? 'classical');
   const [geometry, setGeometry] = useState<Geometry>(initialSceneRef.current?.geometry ?? 'periodic-circle');
+  const [oneDView, setOneDView] = useState<'plot' | 'ring'>(
+    // The circle is the primary representation of periodic 1D topology.
+    initialSceneRef.current?.view1d ?? 'ring',
+  );
+  const [scaleMode, setScaleMode] = useState<'auto' | 'fixed' | 'normalize'>(
+    initialSceneRef.current?.scaleMode ?? 'auto',
+  );
   const classicalController = usePeriodicClassicalPrototype(mode === 'classical');
   const quantumController = usePeriodicQuantumPrototype(mode === 'quantum-one-particle');
   const fixedClassicalController = useFixedClassicalPrototype(
@@ -63,7 +72,57 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
   };
 
   const handleGeometryChange = (nextGeometry: Geometry): void => {
+    // Carry the displayed quantity across geometry changes whenever the
+    // destination supports it (e.g. classical energy density survives moving
+    // from the ring to the 2D torus).
+    const currentQuantity = activeController.quantity;
     setGeometry(nextGeometry);
+
+    if (mode === 'classical') {
+      const destination = isGeometry2D(nextGeometry)
+        ? nextGeometry === 'torus-periodic'
+          ? torus2DController
+          : square2DController
+        : nextGeometry === 'fixed-interval'
+          ? fixedClassicalController
+          : classicalController;
+      if (
+        currentQuantity === 'displacement' ||
+        currentQuantity === 'velocity' ||
+        currentQuantity === 'energy-density'
+      ) {
+        destination.setQuantity(currentQuantity);
+      }
+      return;
+    }
+
+    if (isGeometry2D(nextGeometry)) {
+      const destination =
+        nextGeometry === 'torus-periodic' ? torus2DQuantumController : square2DQuantumController;
+      if (
+        currentQuantity === 'probability-density' ||
+        currentQuantity === 'magnitude' ||
+        currentQuantity === 'real-part' ||
+        currentQuantity === 'imaginary-part' ||
+        currentQuantity === 'phase-magnitude'
+      ) {
+        destination.setQuantity(currentQuantity);
+      }
+      return;
+    }
+
+    const destination =
+      nextGeometry === 'fixed-interval' ? fixedQuantumController : quantumController;
+    if (
+      currentQuantity === 'probability-density' ||
+      currentQuantity === 'magnitude' ||
+      currentQuantity === 'real-part' ||
+      currentQuantity === 'imaginary-part' ||
+      currentQuantity === 'phase-magnitude' ||
+      currentQuantity === 'real-imaginary-parts'
+    ) {
+      destination.setQuantity(currentQuantity);
+    }
   };
 
   const activeController =
@@ -114,12 +173,29 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
 
     if (initialScene !== null && restoreControllersRef.current !== null) {
       applySceneState(initialScene, restoreControllersRef.current);
+    } else if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
+      restoreControllersRef.current !== null
+    ) {
+      // Respect reduced-motion: start paused unless a shared scene explicitly
+      // requests playback.
+      const controllers = restoreControllersRef.current;
+      controllers.classicalController.setPlaying(false);
+      controllers.fixedClassicalController.setPlaying(false);
+      controllers.square2DController.setPlaying(false);
+      controllers.torus2DController.setPlaying(false);
+      controllers.quantumController.setPlaying(false);
+      controllers.fixedQuantumController.setPlaying(false);
+      controllers.square2DQuantumController.setPlaying(false);
+      controllers.torus2DQuantumController.setPlaying(false);
     }
 
     restoreCompleteRef.current = true;
   }, []);
 
   const activeSceneState = useMemo<SceneStateV1>(() => {
+    const baseScene = ((): SceneStateV1 => {
     switch (`${mode}:${geometry}`) {
       case 'classical:periodic-circle':
         return {
@@ -244,9 +320,14 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
           config: torus2DQuantumController.config,
         };
     }
+    })();
+
+    return { ...baseScene, view1d: oneDView, scaleMode };
   }, [
     mode,
     geometry,
+    oneDView,
+    scaleMode,
     classicalController.circleLayout,
     classicalController.config,
     classicalController.playing,
@@ -312,9 +393,45 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
     };
   }, [activeSceneState]);
 
+  const statusSnapshot = activeController.snapshot;
+  const statusDiagnostics = activeController.diagnostics;
+  const resolutionLabel =
+    'siteCount' in statusSnapshot
+      ? `${statusSnapshot.siteCount}`
+      : `${statusSnapshot.width} × ${statusSnapshot.height}`;
+  const normError =
+    'normError' in statusDiagnostics ? statusDiagnostics.normError : undefined;
+  const energyDrift =
+    'relativeEnergyDrift' in statusDiagnostics
+      ? statusDiagnostics.relativeEnergyDrift
+      : undefined;
+  const fieldStats =
+    'fieldStats' in activeController ? activeController.fieldStats : null;
+  const stationaryNote =
+    mode === 'quantum-one-particle' &&
+    activeController.config.initialPreset === 'selected-normal-mode' &&
+    (activeController.quantity === 'probability-density' ||
+      activeController.quantity === 'magnitude')
+      ? 'A single normal mode is a stationary state: only its global phase evolves in time, so its probability distribution stays constant. Choose the real part, imaginary part, or complex-amplitude view to see the phase rotate.'
+      : undefined;
+  const centerInfo = isPeriodicCircleGeometry(geometry)
+    ? {
+        time: activeController.displayTime,
+        resolutionLabel,
+        conservationLabel: normError !== undefined ? 'Norm err' : 'E drift',
+        conservationValue:
+          normError !== undefined
+            ? normError.toExponential(1)
+            : (energyDrift ?? 0).toExponential(1),
+        requestedSpeed: activeController.speed,
+        achievedSpeedRatio: activeController.achievedSpeedRatio,
+      }
+    : undefined;
+
   return (
     <SimulationShell embedded={embedded}>
       <section className="scene-layout">
+        <div className="control-column">
         {mode === 'classical' && isGeometry2D(geometry) ? (
           <Classical2DControls
             config={classical2DBranch.config}
@@ -396,28 +513,55 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
             onStep={quantum1DBranch.stepOnce}
           />
         )}
-        <PrototypeCanvas
-          circleLayout={
-            mode === 'classical' &&
-            geometry === 'periodic-circle' &&
-            activeController.quantity === 'displacement'
-              ? classicalController.circleLayout
-              : 'radial'
-          }
-          circleGeometryMode={geometry === 'periodic-circle-fixed' ? 'fixed' : 'deformed'}
-          quantity={activeController.quantity}
-          showLattice={activeController.showLattice}
-          showSprings={
-            mode === 'classical'
-              ? isPeriodicCircleGeometry(geometry)
-                ? classicalController.showSprings
-                : geometry === 'fixed-interval'
-                  ? fixedClassicalController.showSprings
-                  : false
-              : false
-          }
-          snapshot={activeController.snapshot}
-        />
+          <DisplayControls
+            scaleMode={scaleMode}
+            showViewChoice={isPeriodicCircleGeometry(geometry)}
+            view1d={oneDView}
+            onScaleModeChange={setScaleMode}
+            onView1dChange={setOneDView}
+          />
+        </div>
+        <div className="visual-column">
+          <PrototypeCanvas
+            centerInfo={centerInfo}
+            frameChannel={activeController.frameChannel}
+            infoNote={stationaryNote}
+            circleLayout={
+              mode === 'classical' &&
+              geometry === 'periodic-circle' &&
+              activeController.quantity === 'displacement'
+                ? classicalController.circleLayout
+                : 'radial'
+            }
+            circleGeometryMode={geometry === 'periodic-circle-fixed' ? 'fixed' : 'deformed'}
+            oneDView={oneDView}
+            quantity={activeController.quantity}
+            scaleMode={scaleMode === 'auto' ? undefined : scaleMode}
+            showLattice={activeController.showLattice}
+            showSprings={
+              mode === 'classical'
+                ? isPeriodicCircleGeometry(geometry)
+                  ? classicalController.showSprings
+                  : geometry === 'fixed-interval'
+                    ? fixedClassicalController.showSprings
+                    : false
+                : false
+            }
+            snapshot={activeController.snapshot}
+          />
+          <StatusStrip
+            achievedSpeedRatio={activeController.achievedSpeedRatio}
+            energyDrift={energyDrift}
+            fieldUpdatesPerSecond={fieldStats?.updatesPerSecond}
+            normError={normError}
+            playing={activeController.playing}
+            requestedSpeed={activeController.speed}
+            resolutionLabel={resolutionLabel}
+            spacing={statusSnapshot.spacing}
+            targetLagSeconds={fieldStats?.lagSeconds ?? null}
+            time={activeController.displayTime}
+          />
+        </div>
       </section>
     </SimulationShell>
   );

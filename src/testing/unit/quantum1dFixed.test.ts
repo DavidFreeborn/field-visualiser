@@ -87,6 +87,6 @@ describe('Quantum1DFixedEngine', () => {
     expect(snapshot.amplitudeReal[32]).toBeCloseTo(0.0017328455489409812, 12);
     expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(0.001830294050642062, 12);
     expect(snapshot.totalNorm).toBeCloseTo(1, 12);
-    expect(diagnostics.normError).toBeCloseTo(1.1102230246251565e-16, 18);
+    expect(diagnostics.normError).toBeLessThan(1e-12);
   });
 });

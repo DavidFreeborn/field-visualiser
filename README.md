@@ -14,6 +14,31 @@ The repository is being built in phases. The current implementation includes:
 - 2D square and torus free-field one-particle systems
 - Pixi-based 1D and 2D rendering with diagnostics and regression coverage
 
+Performance and rendering architecture:
+
+- Quantum evolution is analytic in the mode basis: immutable initial modal
+  coefficients plus `setTime(t)`, i.e. one phase rotation and one inverse
+  transform per displayed frame, at any target time (no CFL-style substepping)
+- Transforms are O(N log N): radix-2 FFT for power-of-two sizes, Bluestein's
+  chirp-z for arbitrary sizes, DST-I via odd extension for Dirichlet systems,
+  with a cached dense mat-vec below the measured small-size crossover;
+  the dense reference transforms are retained for equivalence tests
+- The 2D quantum worker uses a latest-target-time protocol: at most one
+  calculation in flight, coalesced newest target, generation IDs that
+  invalidate stale results on reset/config/quantity changes, and display
+  buffers recycled between main thread and worker
+- Per-frame numeric data bypasses React state through an imperative frame
+  channel; React handles configuration and ~3 Hz diagnostics only
+- 1D rendering aggregates to the screen-space pixel budget (min/max envelope
+  for signed traces, mean with max outline for densities), the fixed ring is
+  a single texture-mapped mesh, and renderer resolution is capped at 2x DPR
+- Periodic 1D systems render as circles by default (the topology is the
+  point), with compact diagnostics in the ring centre; the unwrapped plot
+  remains available as an analysis view
+- 1D quantum systems offer a combined Re/Im view: two radial displacement
+  traces (colorblind-safe blue solid / orange dashed) around the base circle,
+  sharing one symmetric scale from max(|Re psi|, |Im psi|)
+
 The codebase already separates:
 
 - `physics-core`: deterministic simulation logic
@@ -38,6 +63,7 @@ npm run dev
 npm run test
 npm run build
 npm run test:e2e
+npm run bench   # vitest benchmarks: transforms, engines, renderer
 ```
 
 ## Scientific scope
@@ -144,10 +170,19 @@ parameter. At a high level the payload includes:
 - schema version
 - active mode and geometry
 - active system config for the selected branch
-- displayed quantity
+- displayed quantity (including the complex phase-magnitude view and the
+  combined `real-imaginary-parts` view for 1D quantum systems)
+- 1D representation (`view1d`: the circle topology view, the default, or the
+  unwrapped analysis plot) and value-scale policy (`scaleMode`: auto, fixed,
+  or normalize each frame)
 - play/pause state
 - speed
 - relevant display toggles such as lattice and spring visibility
+
+Scene URLs serialized before `view1d`/`scaleMode` existed continue to load
+with an equivalent physical configuration; the new display fields default to
+the current defaults (`ring`, `auto`), so circular geometries open as
+circles.
 
 Transient diagnostics, render timings, loading state, and runtime errors are
 not serialized.

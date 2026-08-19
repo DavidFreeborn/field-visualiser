@@ -52,6 +52,17 @@ export interface SceneStateV1 {
   readonly geometry: Geometry;
   readonly quantity: SceneQuantity;
   readonly circleLayout?: 'radial' | 'longitudinal';
+  /**
+   * 1D representation: the ring topology view (default) or the unwrapped
+   * position-vs-value analysis plot. Optional so pre-existing serialized
+   * scenes keep loading; absent means the current default ('ring').
+   */
+  readonly view1d?: 'plot' | 'ring';
+  /**
+   * Value scale: 'fixed' or 'normalize' each frame; 'auto' (default) picks
+   * fixed for signed quantities and normalize for non-negative ones.
+   */
+  readonly scaleMode?: 'auto' | 'fixed' | 'normalize';
   readonly playing: boolean;
   readonly speed: number;
   readonly showLattice: boolean;
@@ -102,6 +113,8 @@ const QUANTUM_1D_QUANTITIES: readonly Quantum1DPeriodicQuantity[] = [
   'magnitude',
   'real-part',
   'imaginary-part',
+  'phase-magnitude',
+  'real-imaginary-parts',
 ];
 const QUANTUM_2D_PRESETS: readonly Quantum2DInitialPreset[] = [
   'site-localized',
@@ -114,6 +127,7 @@ const QUANTUM_2D_QUANTITIES: readonly Quantum2DPeriodicQuantity[] = [
   'magnitude',
   'real-part',
   'imaginary-part',
+  'phase-magnitude',
 ];
 
 export function parseSceneState(search: string): SceneStateV1 | null {
@@ -138,7 +152,17 @@ export function parseSceneState(search: string): SceneStateV1 | null {
     const showLattice = coerceBoolean(parsed.showLattice, getDefaultShowLattice(mode, geometry));
     const showSprings = coerceBoolean(parsed.showSprings, getDefaultShowSprings(mode, geometry));
     const configRecord = isRecord(parsed.config) ? parsed.config : {};
+    // Optional display fields added after the first release; absent in older
+    // serialized scenes, which then get today's defaults. The circle is the
+    // default representation for periodic 1D geometries.
+    const view1d = coerceEnum(parsed.view1d, ['plot', 'ring'] as const, 'ring');
+    const scaleMode = coerceEnum(
+      parsed.scaleMode,
+      ['auto', 'fixed', 'normalize'] as const,
+      'auto',
+    );
 
+    const baseScene = ((): SceneStateV1 | null => {
     switch (`${mode}:${geometry}`) {
       case 'classical:periodic-circle':
         return {
@@ -304,6 +328,13 @@ export function parseSceneState(search: string): SceneStateV1 | null {
       default:
         return null;
     }
+    })();
+
+    if (baseScene === null) {
+      return null;
+    }
+
+    return { ...baseScene, view1d, scaleMode };
   } catch {
     return null;
   }

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint .",
-    "format": "prettier --check ."
+    "format": "prettier --check .",
+    "bench": "vitest bench --run"
   },
   "dependencies": {
     "pixi.js": "^8.10.0",

@@ -16,16 +16,17 @@ class MockWorker {
   public postMessage(message: unknown): void {
     workerMessages.push(message);
 
-    const request = message as { type?: string; quantity?: string };
+    const request = message as { type?: string; quantity?: string; generation?: number };
     if (
       request.type === 'configure' ||
       request.type === 'set-quantity' ||
-      request.type === 'sync-state'
+      request.type === 'set-time'
     ) {
       queueMicrotask(() => {
         this.onmessage?.({
           data: {
             type: 'state',
+            generation: request.generation ?? 0,
             snapshot: {
               kind: 'quantum-2d-display',
               sourceKind: 'quantum-2d-periodic',
@@ -49,6 +50,7 @@ class MockWorker {
               totalNorm: 1,
               normError: 0,
             },
+            timings: { computeMs: 0, snapshotMs: 0 },
           },
         } as MessageEvent<Quantum2DWorkerResponse>);
       });
@@ -111,9 +113,58 @@ describe('useQuantum2DPrototype', () => {
       expect(screen.getByTestId('quantity')).toHaveTextContent('real-part');
     });
 
-    expect(workerMessages).toContainEqual({
-      type: 'set-quantity',
-      quantity: 'real-part',
+    expect(workerMessages).toContainEqual(
+      expect.objectContaining({
+        type: 'set-quantity',
+        quantity: 'real-part',
+      }),
+    );
+  });
+
+  it('reconfigures the existing worker on config changes instead of restarting it', async () => {
+    const user = userEvent.setup();
+
+    function Probe(): React.JSX.Element {
+      const controller = useQuantum2DPrototype('torus-periodic');
+
+      useEffect(() => {
+        controller.setPlaying(false);
+      }, [controller]);
+
+      return (
+        <div>
+          <div data-testid="size">{controller.config.size}</div>
+          <button
+            type="button"
+            onClick={() => controller.setConfig({ ...controller.config, size: 48 })}
+          >
+            resize
+          </button>
+        </div>
+      );
+    }
+
+    render(<Probe />);
+
+    await waitFor(() => {
+      expect(workerMessages.some((m) => (m as { type?: string }).type === 'configure')).toBe(true);
     });
+    const terminationsAfterMount = terminateSpy.mock.calls.length;
+    const configuresBefore = workerMessages.filter(
+      (m) => (m as { type?: string }).type === 'configure',
+    ).length;
+
+    await user.click(screen.getByRole('button', { name: 'resize' }));
+
+    await waitFor(() => {
+      const configuresAfter = workerMessages.filter(
+        (m) => (m as { type?: string }).type === 'configure',
+      ).length;
+      expect(configuresAfter).toBe(configuresBefore + 1);
+    });
+
+    // No worker teardown happened for the config change.
+    expect(terminateSpy.mock.calls.length).toBe(terminationsAfterMount);
+    expect(screen.getByTestId('size')).toHaveTextContent('48');
   });
 });

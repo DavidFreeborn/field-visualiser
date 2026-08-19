@@ -1,3 +1,4 @@
+import { fastDst1Unitary2D } from '../core/fft';
 import { flattenIndex2D } from '../core/grids';
 import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
 import { computeDiscreteNorm } from './initialStates';
@@ -6,8 +7,6 @@ import {
   createFixedQuantumInitialState2D,
   embedInteriorState,
   extractInteriorState,
-  inverseSineTransform2D,
-  sineTransform2D,
   type Quantum2DInitialPreset,
 } from './initialStates2d';
 
@@ -28,7 +27,8 @@ export type Quantum2DFixedQuantity =
   | 'probability-density'
   | 'magnitude'
   | 'real-part'
-  | 'imaginary-part';
+  | 'imaginary-part'
+  | 'phase-magnitude';
 
 export interface Quantum2DFixedSnapshot {
   readonly kind: 'quantum-2d-fixed';
@@ -65,7 +65,11 @@ export class Quantum2DFixedEngine
   private time = 0;
   private spacing = 1;
   private interiorSize = 0;
+  private maximumFrequency = 0;
   private modeFrequencies = new Float64Array(0);
+
+  /** Number of inverse transforms performed since construction (test instrumentation). */
+  public inverseTransformCount = 0;
   private initialModeReal = new Float64Array(0);
   private initialModeImaginary = new Float64Array(0);
   private modeReal = new Float64Array(0);
@@ -124,7 +128,7 @@ export class Quantum2DFixedEngine
     );
     this.modeReal = new Float64Array(this.interiorSize * this.interiorSize);
     this.modeImaginary = new Float64Array(this.interiorSize * this.interiorSize);
-    sineTransform2D(
+    fastDst1Unitary2D(
       this.interiorReal,
       this.interiorImaginary,
       this.interiorSize,
@@ -133,6 +137,10 @@ export class Quantum2DFixedEngine
     );
     this.initialModeReal = new Float64Array(this.modeReal);
     this.initialModeImaginary = new Float64Array(this.modeImaginary);
+    this.maximumFrequency = this.modeFrequencies.reduce(
+      (currentMax, frequency) => Math.max(currentMax, frequency),
+      0,
+    );
   }
 
   public step(dt: number): void {
@@ -156,13 +164,14 @@ export class Quantum2DFixedEngine
       this.modeImaginary[index] = real * sinPhase + imaginary * cosPhase;
     }
 
-    inverseSineTransform2D(
+    fastDst1Unitary2D(
       this.modeReal,
       this.modeImaginary,
       this.interiorSize,
       this.interiorReal,
       this.interiorImaginary,
     );
+    this.inverseTransformCount += 1;
     embedInteriorState(
       this.interiorSize + 2,
       {
@@ -218,13 +227,9 @@ export class Quantum2DFixedEngine
 
   public getDiagnostics(): Quantum2DFixedDiagnostics {
     const totalNorm = computeDiscreteNorm(this.modeReal, this.modeImaginary);
-    const maximumFrequency = this.modeFrequencies.reduce(
-      (currentMax, frequency) => Math.max(currentMax, frequency),
-      0,
-    );
     const recommendedDt =
-      maximumFrequency > 0
-        ? (2 * Math.PI) / (maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
+      this.maximumFrequency > 0
+        ? (2 * Math.PI) / (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
         : 0.05;
 
     return {
@@ -238,30 +243,47 @@ export class Quantum2DFixedEngine
 
   public getDisplaySnapshot(
     quantity: Quantum2DFixedQuantity = 'probability-density',
+    target?: Float32Array,
+    auxTarget?: Float32Array,
   ): Quantum2DDisplaySnapshot {
     if (this.config === null) {
       throw new Error('Engine has not been initialised.');
     }
 
-    const displayValues = new Float32Array(this.siteReal.length);
+    const displayValues =
+      target !== undefined && target.length === this.siteReal.length
+        ? target
+        : new Float32Array(this.siteReal.length);
+    let displayValuesAux: Float32Array | undefined;
 
-    for (let index = 0; index < this.siteReal.length; index += 1) {
-      switch (quantity) {
-        case 'real-part':
-          displayValues[index] = this.siteReal[index];
-          break;
-        case 'imaginary-part':
-          displayValues[index] = this.siteImaginary[index];
-          break;
-        case 'magnitude':
-          displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
-          break;
-        case 'probability-density':
-        default:
-          displayValues[index] =
-            this.siteReal[index] * this.siteReal[index] +
-            this.siteImaginary[index] * this.siteImaginary[index];
-          break;
+    if (quantity === 'phase-magnitude') {
+      displayValuesAux =
+        auxTarget !== undefined && auxTarget.length === this.siteReal.length
+          ? auxTarget
+          : new Float32Array(this.siteReal.length);
+      for (let index = 0; index < this.siteReal.length; index += 1) {
+        displayValues[index] = Math.atan2(this.siteImaginary[index], this.siteReal[index]);
+        displayValuesAux[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+      }
+    } else {
+      for (let index = 0; index < this.siteReal.length; index += 1) {
+        switch (quantity) {
+          case 'real-part':
+            displayValues[index] = this.siteReal[index];
+            break;
+          case 'imaginary-part':
+            displayValues[index] = this.siteImaginary[index];
+            break;
+          case 'magnitude':
+            displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+            break;
+          case 'probability-density':
+          default:
+            displayValues[index] =
+              this.siteReal[index] * this.siteReal[index] +
+              this.siteImaginary[index] * this.siteImaginary[index];
+            break;
+        }
       }
     }
 
@@ -279,6 +301,7 @@ export class Quantum2DFixedEngine
       spacing: this.spacing,
       geometry: 'square-fixed',
       displayValues,
+      ...(displayValuesAux !== undefined ? { displayValuesAux } : {}),
       totalNorm: computeDiscreteNorm(this.siteReal, this.siteImaginary),
     };
   }

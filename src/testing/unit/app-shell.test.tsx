@@ -54,7 +54,7 @@ describe('App', () => {
     );
 
     expect(screen.getByText(/free-field one-particle evolution on the periodic lattice hilbert space, shown on a deforming circular embedding/i)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Probability density')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Site probability |ψᵢ|²')).toBeInTheDocument();
   });
 
   it('switches to the fixed-ring periodic circle controls', async () => {
@@ -167,7 +167,7 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/fixed zero boundary amplitudes/i)).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Magnitude |psi|')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Magnitude |ψ|')).toBeInTheDocument();
     });
 
     expect(screen.getByDisplayValue('2D square, fixed edges')).toBeInTheDocument();

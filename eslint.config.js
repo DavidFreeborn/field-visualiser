@@ -6,7 +6,8 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'coverage', 'playwright-report', 'test-results'],
+    // `scripts/` holds Node-based manual QA tooling outside the browser lint setup.
+    ignores: ['dist', 'coverage', 'playwright-report', 'test-results', 'scripts', 'screenshots'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

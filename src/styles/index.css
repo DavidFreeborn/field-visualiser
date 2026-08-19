@@ -152,13 +152,38 @@ h1 {
   display: grid;
   gap: 1.5rem;
   align-items: start;
-  grid-template-columns: minmax(290px, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
 }
 
+.control-column,
+.visual-column {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* One-column control groups: selected option text never truncates. */
 .control-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: 1fr;
+}
+
+.control-group {
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.control-group > legend {
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .control-grid label,
@@ -286,18 +311,141 @@ h1 {
   border: 1px solid rgba(23, 32, 42, 0.1);
 }
 
-.legend-diverging {
-  background: linear-gradient(90deg, #2d5f9a 0%, #f8f5f1 50%, #a32525 100%);
-}
-
-.legend-sequential {
-  background: linear-gradient(90deg, #fffaf7 0%, #d65a4b 55%, #8f1f1f 100%);
-}
-
 .legend-label,
 .visual-supporting-note {
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.legend-scale-note {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.legend-row-phase {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.phase-wheel {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1px solid rgba(23, 32, 42, 0.15);
+}
+
+.phase-wheel-center {
+  display: inline-block;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Compact diagnostics inside the empty centre of the ring views. */
+.ring-center-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.ring-center-content {
+  max-width: 42%;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.ring-center-grid {
+  display: grid;
+  margin: 0;
+  gap: 0.15rem 1.1rem;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  justify-content: center;
+}
+
+.ring-center-grid dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ring-center-grid dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: #17202a;
+}
+
+.ring-center-trace-legend {
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+
+.ring-center-range {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.trace-swatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.28rem;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+}
+
+.trace-swatch-real {
+  background: #2166ac;
+}
+
+.trace-swatch-imaginary {
+  background: repeating-linear-gradient(90deg, #e08214 0 5px, transparent 5px 8px);
+}
+
+.legend-row-traces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.4rem;
+}
+
+.status-strip {
+  padding: 0.9rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.status-grid {
+  display: grid;
+  margin: 0;
+  gap: 0.35rem 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.status-grid dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.status-grid dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+}
+
+.status-warning {
+  margin-top: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(159, 31, 39, 0.1);
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {
@@ -305,8 +453,20 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  /* On narrow screens the plot comes first, then essential controls. */
+  .visual-column {
+    order: -1;
+  }
+
   .visual-canvas {
-    height: 460px;
+    height: 420px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
 

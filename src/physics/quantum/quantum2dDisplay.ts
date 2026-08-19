@@ -2,7 +2,8 @@ export type Quantum2DDisplayQuantity =
   | 'probability-density'
   | 'magnitude'
   | 'real-part'
-  | 'imaginary-part';
+  | 'imaginary-part'
+  | 'phase-magnitude';
 
 export interface Quantum2DDisplaySnapshot {
   readonly kind: 'quantum-2d-display';
@@ -17,6 +18,9 @@ export interface Quantum2DDisplaySnapshot {
   readonly domainLength: number;
   readonly spacing: number;
   readonly geometry: 'torus-periodic' | 'square-fixed';
+  /** For 'phase-magnitude' this holds the phase (radians); otherwise the quantity itself. */
   readonly displayValues: Float32Array;
+  /** Magnitude channel, present only for the 'phase-magnitude' quantity. */
+  readonly displayValuesAux?: Float32Array;
   readonly totalNorm: number;
 }

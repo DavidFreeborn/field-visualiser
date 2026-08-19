@@ -30,7 +30,15 @@ interface PrototypeControlsProps {
   readonly onShowSpringsChange: (showSprings: boolean) => void;
 }
 
-const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048] as const;
+const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048];
+
+// Include the active value when a preset or shared URL uses a site count that
+// is not one of the listed options, so the select shows the true count.
+function getResolutionOptions(current: number): number[] {
+  return resolutionOptions.includes(current)
+    ? resolutionOptions
+    : [...resolutionOptions, current].sort((a, b) => a - b);
+}
 
 const initialPresetLabels: Record<Classical1DInitialPreset, string> = {
   'gaussian-displacement': 'Gaussian displacement',
@@ -119,12 +127,12 @@ export function PrototypeControls({
               })
             }
           >
-            {resolutionOptions.map((siteCount) => (
+            {getResolutionOptions(config.siteCount).map((siteCount) => (
               <option
                 key={siteCount}
                 value={siteCount}
               >
-                {siteCount === 2048 ? `Almost continuum (${siteCount} oscillators)` : `${siteCount} oscillators`}
+                {`${siteCount} oscillators`}
               </option>
             ))}
           </select>

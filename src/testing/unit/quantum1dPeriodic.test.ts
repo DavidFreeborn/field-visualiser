@@ -97,6 +97,6 @@ describe('Quantum1DPeriodicEngine', () => {
     expect(snapshot.amplitudeReal[32]).toBeCloseTo(-0.0005316483713658126, 12);
     expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(0.0005540054069250963, 12);
     expect(snapshot.totalNorm).toBeCloseTo(1, 12);
-    expect(diagnostics.normError).toBeCloseTo(7.771561172376096e-16, 18);
+    expect(diagnostics.normError).toBeLessThan(1e-12);
   });
 });

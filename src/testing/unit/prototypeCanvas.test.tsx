@@ -165,6 +165,7 @@ describe('PrototypeCanvas', () => {
       expect(renderSpy).toHaveBeenLastCalledWith(nextSnapshot, {
         circleGeometryMode: 'deformed',
         circleLayout: 'radial',
+        oneDView: 'ring',
         quantity: 'velocity',
         showLattice: false,
         showSprings: true,
@@ -233,6 +234,7 @@ describe('PrototypeCanvas', () => {
       expect(renderSpy).toHaveBeenLastCalledWith(nextSnapshot, {
         circleGeometryMode: 'deformed',
         circleLayout: 'radial',
+        oneDView: 'ring',
         quantity: 'magnitude',
         showLattice: true,
         showSprings: false,
@@ -297,6 +299,7 @@ describe('PrototypeCanvas', () => {
       expect(renderSpy).toHaveBeenCalledWith(snapshot, {
         circleGeometryMode: 'fixed',
         circleLayout: 'radial',
+        oneDView: 'ring',
         quantity: 'displacement',
         showLattice: true,
         showSprings: true,

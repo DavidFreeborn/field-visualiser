@@ -1,11 +1,10 @@
+import { fastForwardDftUnitary2D, fastInverseDftUnitary2D } from '../core/fft';
 import { flattenIndex2D } from '../core/grids';
 import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
 import { computeDiscreteNorm } from './initialStates';
 import type { Quantum2DDisplaySnapshot } from './quantum2dDisplay';
 import {
   createPeriodicQuantumInitialState2D,
-  discreteFourierTransform2D,
-  inverseDiscreteFourierTransform2D,
   type Quantum2DInitialPreset,
 } from './initialStates2d';
 
@@ -26,7 +25,8 @@ export type Quantum2DPeriodicQuantity =
   | 'probability-density'
   | 'magnitude'
   | 'real-part'
-  | 'imaginary-part';
+  | 'imaginary-part'
+  | 'phase-magnitude';
 
 export interface Quantum2DPeriodicSnapshot {
   readonly kind: 'quantum-2d-periodic';
@@ -66,7 +66,11 @@ export class Quantum2DPeriodicEngine
   private config: Quantum2DPeriodicConfig | null = null;
   private time = 0;
   private spacing = 1;
+  private maximumFrequency = 0;
   private modeFrequencies = new Float64Array(0);
+
+  /** Number of inverse transforms performed since construction (test instrumentation). */
+  public inverseTransformCount = 0;
   private initialModeReal = new Float64Array(0);
   private initialModeImaginary = new Float64Array(0);
   private modeReal = new Float64Array(0);
@@ -109,7 +113,7 @@ export class Quantum2DPeriodicEngine
 
     this.modeReal = new Float64Array(initialSiteState.real.length);
     this.modeImaginary = new Float64Array(initialSiteState.real.length);
-    discreteFourierTransform2D(
+    fastForwardDftUnitary2D(
       this.siteReal,
       this.siteImaginary,
       config.size,
@@ -118,6 +122,10 @@ export class Quantum2DPeriodicEngine
     );
     this.initialModeReal = new Float64Array(this.modeReal);
     this.initialModeImaginary = new Float64Array(this.modeImaginary);
+    this.maximumFrequency = this.modeFrequencies.reduce(
+      (currentMax, frequency) => Math.max(currentMax, frequency),
+      0,
+    );
   }
 
   public step(dt: number): void {
@@ -145,13 +153,14 @@ export class Quantum2DPeriodicEngine
       this.modeImaginary[index] = real * sinPhase + imaginary * cosPhase;
     }
 
-    inverseDiscreteFourierTransform2D(
+    fastInverseDftUnitary2D(
       this.modeReal,
       this.modeImaginary,
       this.config.size,
       this.siteReal,
       this.siteImaginary,
     );
+    this.inverseTransformCount += 1;
   }
 
   public getSnapshot(
@@ -195,13 +204,9 @@ export class Quantum2DPeriodicEngine
 
   public getDiagnostics(): Quantum2DPeriodicDiagnostics {
     const totalNorm = computeDiscreteNorm(this.modeReal, this.modeImaginary);
-    const maximumFrequency = this.modeFrequencies.reduce(
-      (currentMax, frequency) => Math.max(currentMax, frequency),
-      0,
-    );
     const recommendedDt =
-      maximumFrequency > 0
-        ? (2 * Math.PI) / (maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
+      this.maximumFrequency > 0
+        ? (2 * Math.PI) / (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
         : 0.05;
 
     return {
@@ -215,30 +220,47 @@ export class Quantum2DPeriodicEngine
 
   public getDisplaySnapshot(
     quantity: Quantum2DPeriodicQuantity = 'probability-density',
+    target?: Float32Array,
+    auxTarget?: Float32Array,
   ): Quantum2DDisplaySnapshot {
     if (this.config === null) {
       throw new Error('Engine has not been initialised.');
     }
 
-    const displayValues = new Float32Array(this.siteReal.length);
+    const displayValues =
+      target !== undefined && target.length === this.siteReal.length
+        ? target
+        : new Float32Array(this.siteReal.length);
+    let displayValuesAux: Float32Array | undefined;
 
-    for (let index = 0; index < this.siteReal.length; index += 1) {
-      switch (quantity) {
-        case 'real-part':
-          displayValues[index] = this.siteReal[index];
-          break;
-        case 'imaginary-part':
-          displayValues[index] = this.siteImaginary[index];
-          break;
-        case 'magnitude':
-          displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
-          break;
-        case 'probability-density':
-        default:
-          displayValues[index] =
-            this.siteReal[index] * this.siteReal[index] +
-            this.siteImaginary[index] * this.siteImaginary[index];
-          break;
+    if (quantity === 'phase-magnitude') {
+      displayValuesAux =
+        auxTarget !== undefined && auxTarget.length === this.siteReal.length
+          ? auxTarget
+          : new Float32Array(this.siteReal.length);
+      for (let index = 0; index < this.siteReal.length; index += 1) {
+        displayValues[index] = Math.atan2(this.siteImaginary[index], this.siteReal[index]);
+        displayValuesAux[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+      }
+    } else {
+      for (let index = 0; index < this.siteReal.length; index += 1) {
+        switch (quantity) {
+          case 'real-part':
+            displayValues[index] = this.siteReal[index];
+            break;
+          case 'imaginary-part':
+            displayValues[index] = this.siteImaginary[index];
+            break;
+          case 'magnitude':
+            displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+            break;
+          case 'probability-density':
+          default:
+            displayValues[index] =
+              this.siteReal[index] * this.siteReal[index] +
+              this.siteImaginary[index] * this.siteImaginary[index];
+            break;
+        }
       }
     }
 
@@ -256,6 +278,7 @@ export class Quantum2DPeriodicEngine
       spacing: this.spacing,
       geometry: 'torus-periodic',
       displayValues,
+      ...(displayValuesAux !== undefined ? { displayValuesAux } : {}),
       totalNorm: computeDiscreteNorm(this.siteReal, this.siteImaginary),
     };
   }

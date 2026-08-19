@@ -125,7 +125,7 @@ export function Classical2DControls({
                 key={size}
                 value={size}
               >
-                {size === 256 ? `Almost continuum (${size} × ${size})` : `${size} × ${size}`}
+                {`${size} × ${size}`}
               </option>
             ))}
           </select>
