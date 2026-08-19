@@ -4,6 +4,7 @@ import type {
 } from '../../physics/classical/classical1dPeriodic';
 import type { Classical1DFixedConfig } from '../../physics/classical/classical1dFixed';
 import type { Classical1DInitialPreset } from '../../physics/classical/initialConditions';
+import { ModeNumberPicker } from './ModeNumberPicker';
 import { ModeSwitch, type AppMode } from './ModeSwitch';
 import { GeometrySwitch, type Geometry1D } from './GeometrySwitch';
 
@@ -17,9 +18,12 @@ interface PrototypeControlsProps {
   readonly speed: number;
   readonly showLattice: boolean;
   readonly showSprings: boolean;
+  readonly view1d: 'plot' | 'ring';
   readonly onModeChange: (mode: AppMode) => void;
   readonly onGeometryChange: (geometry: Geometry1D) => void;
-  readonly onConfigChange: (nextConfig: Classical1DPeriodicConfig | Classical1DFixedConfig) => void;
+  readonly onConfigChange: (
+    nextConfig: Classical1DPeriodicConfig | Classical1DFixedConfig,
+  ) => void;
   readonly onQuantityChange: (quantity: Classical1DPeriodicQuantity) => void;
   readonly onCircleLayoutChange: (layout: 'radial' | 'longitudinal') => void;
   readonly onPlayingChange: (playing: boolean) => void;
@@ -28,6 +32,7 @@ interface PrototypeControlsProps {
   readonly onSpeedChange: (speed: number) => void;
   readonly onShowLatticeChange: (showLattice: boolean) => void;
   readonly onShowSpringsChange: (showSprings: boolean) => void;
+  readonly onView1dChange: (view: 'plot' | 'ring') => void;
 }
 
 const resolutionOptions = [32, 64, 128, 256, 512, 1024, 2048];
@@ -40,12 +45,30 @@ function getResolutionOptions(current: number): number[] {
     : [...resolutionOptions, current].sort((a, b) => a - b);
 }
 
-const initialPresetLabels: Record<Classical1DInitialPreset, string> = {
-  'gaussian-displacement': 'Gaussian displacement',
+/** Modes offered by the standing-mode superposition picker. */
+const STANDING_MODE_OPTIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+// A zero-velocity Gaussian displacement is an equal combination of left- and
+// right-moving branches, so its label says so. The positive-mean Gaussian
+// velocity (which excites the periodic uniform mode) is engine/test-only and
+// deliberately not offered here.
+const periodicPresetLabels: Partial<Record<Classical1DInitialPreset, string>> =
+  {
+    'gaussian-displacement': 'Gaussian displacement, splits both ways',
+    'zero-mean-gaussian-velocity': 'Gaussian velocity, zero mean',
+    'travelling-gaussian-right':
+      'Right-moving wavepacket (exact lattice dispersion)',
+    'single-site-displacement': 'Single-site displacement',
+    'standing-modes': 'Standing-mode superposition',
+  };
+
+// Fixed endpoints cannot support a globally one-way state, and there is no
+// zero mode to cancel, so the periodic-only presets are not offered.
+const fixedPresetLabels: Partial<Record<Classical1DInitialPreset, string>> = {
+  'gaussian-displacement': 'Gaussian displacement, splits both ways',
   'gaussian-velocity': 'Gaussian velocity',
   'single-site-displacement': 'Single-site displacement',
-  'standing-mode-1': 'Standing mode n = 1',
-  'standing-mode-2': 'Standing mode n = 2',
+  'standing-modes': 'Standing-mode superposition',
 };
 
 export function PrototypeControls({
@@ -69,7 +92,12 @@ export function PrototypeControls({
   onSpeedChange,
   onShowLatticeChange,
   onShowSpringsChange,
+  view1d,
+  onView1dChange,
 }: PrototypeControlsProps): React.JSX.Element {
+  const presetLabels =
+    geometry === 'fixed-interval' ? fixedPresetLabels : periodicPresetLabels;
+
   return (
     <section className="control-panel">
       <div className="control-header">
@@ -83,10 +111,7 @@ export function PrototypeControls({
       </div>
 
       <div className="control-grid">
-        <ModeSwitch
-          mode={mode}
-          onModeChange={onModeChange}
-        />
+        <ModeSwitch mode={mode} onModeChange={onModeChange} />
 
         <GeometrySwitch
           geometry={geometry}
@@ -101,20 +126,28 @@ export function PrototypeControls({
             onChange={(event) =>
               onConfigChange({
                 ...config,
-                initialPreset: event.target.value as Classical1DInitialPreset,
-              })
+                initialPreset: event.target.value,
+              } as Classical1DPeriodicConfig | Classical1DFixedConfig)
             }
           >
-            {Object.entries(initialPresetLabels).map(([value, label]) => (
-              <option
-                key={value}
-                value={value}
-              >
+            {Object.entries(presetLabels).map(([value, label]) => (
+              <option key={value} value={value}>
                 {label}
               </option>
             ))}
           </select>
         </label>
+
+        {config.initialPreset === 'standing-modes' ? (
+          <ModeNumberPicker
+            label="Standing modes n"
+            options={STANDING_MODE_OPTIONS}
+            selected={config.modeNumbers}
+            onChange={(modeNumbers) =>
+              onConfigChange({ ...config, modeNumbers })
+            }
+          />
+        ) : null}
 
         <label>
           <span>Oscillator density</span>
@@ -128,10 +161,7 @@ export function PrototypeControls({
             }
           >
             {getResolutionOptions(config.siteCount).map((siteCount) => (
-              <option
-                key={siteCount}
-                value={siteCount}
-              >
+              <option key={siteCount} value={siteCount}>
                 {`${siteCount} oscillators`}
               </option>
             ))}
@@ -143,7 +173,9 @@ export function PrototypeControls({
           <select
             value={quantity}
             onChange={(event) =>
-              onQuantityChange(event.target.value as Classical1DPeriodicQuantity)
+              onQuantityChange(
+                event.target.value as Classical1DPeriodicQuantity,
+              )
             }
           >
             <option value="displacement">Displacement</option>
@@ -158,11 +190,28 @@ export function PrototypeControls({
             <select
               value={circleLayout}
               onChange={(event) =>
-                onCircleLayoutChange(event.target.value as 'radial' | 'longitudinal')
+                onCircleLayoutChange(
+                  event.target.value as 'radial' | 'longitudinal',
+                )
               }
             >
               <option value="radial">Radial</option>
               <option value="longitudinal">Longitudinal</option>
+            </select>
+          </label>
+        ) : null}
+
+        {geometry !== 'fixed-interval' ? (
+          <label>
+            <span>1D representation</span>
+            <select
+              value={view1d}
+              onChange={(event) =>
+                onView1dChange(event.target.value as 'plot' | 'ring')
+              }
+            >
+              <option value="ring">Circle (topology, default)</option>
+              <option value="plot">Unwrapped plot (analysis view)</option>
             </select>
           </label>
         ) : null}
@@ -209,18 +258,10 @@ export function PrototypeControls({
         >
           {playing ? 'Pause' : 'Play'}
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onStep}
-        >
+        <button className="secondary-button" type="button" onClick={onStep}>
           Single step
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onReset}
-        >
+        <button className="secondary-button" type="button" onClick={onReset}>
           Reset
         </button>
       </div>

@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type {
-  Classical1DPeriodicSnapshot,
-} from '../../physics/classical/classical1dPeriodic';
-import type {
-  Quantum1DPeriodicSnapshot,
-} from '../../physics/quantum/quantum1dPeriodic';
-import type {
-  Quantum1DFixedSnapshot,
-} from '../../physics/quantum/quantum1dFixed';
+import type { Classical1DPeriodicSnapshot } from '../../physics/classical/classical1dPeriodic';
+import type { Quantum1DPeriodicSnapshot } from '../../physics/quantum/quantum1dPeriodic';
+import type { Quantum1DFixedSnapshot } from '../../physics/quantum/quantum1dFixed';
 import type { Quantum2DDisplaySnapshot } from '../../physics/quantum/quantum2dDisplay';
 import type { Classical1DFixedSnapshot } from '../../physics/classical/classical1dFixed';
 import type { Classical2DSnapshot } from '../../physics/classical/classical2d';
@@ -31,16 +25,6 @@ type CanvasSnapshot =
   | Quantum1DFixedSnapshot
   | Quantum2DDisplaySnapshot;
 
-/** Compact diagnostics shown inside the empty centre of the ring views. */
-export interface RingCenterInfo {
-  readonly time: number;
-  readonly resolutionLabel: string;
-  readonly conservationLabel: string;
-  readonly conservationValue: string;
-  readonly requestedSpeed: number;
-  readonly achievedSpeedRatio: number | null;
-}
-
 interface PrototypeCanvasProps {
   readonly snapshot: CanvasSnapshot;
   /**
@@ -56,8 +40,6 @@ interface PrototypeCanvasProps {
   readonly circleGeometryMode?: 'deformed' | 'fixed';
   readonly oneDView?: 'plot' | 'ring';
   readonly scaleMode?: 'fixed' | 'normalize';
-  /** Diagnostics for the centre of the ring views. */
-  readonly centerInfo?: RingCenterInfo;
   /** Optional explanatory note (e.g. stationary-state explanation). */
   readonly infoNote?: string;
 }
@@ -73,10 +55,11 @@ export function PrototypeCanvas({
   // The circle is the primary representation for periodic 1D systems.
   oneDView = 'ring',
   scaleMode,
-  centerInfo,
   infoNote,
 }: PrototypeCanvasProps): React.JSX.Element {
-  const [rendererStatus, setRendererStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [rendererStatus, setRendererStatus] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading');
   const [retryNonce, setRetryNonce] = useState(0);
   const [frameInfo, setFrameInfo] = useState<RenderFrameInfo | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -108,7 +91,8 @@ export function PrototypeCanvas({
   // Renders a frame and publishes the mapping actually used to the legend,
   // updating React state only when the mapping changes visibly.
   const renderFrame = (frameSnapshot: CanvasSnapshot): void => {
-    const info = rendererRef.current?.render(frameSnapshot, optionsRef.current) ?? null;
+    const info =
+      rendererRef.current?.render(frameSnapshot, optionsRef.current) ?? null;
 
     if (info === null) {
       return;
@@ -140,39 +124,46 @@ export function PrototypeCanvas({
     }
     host.replaceChildren();
 
-    void loadRendererModule().then(({ PeriodicClassicalFieldRenderer }) => {
-      if (disposed) {
-        return;
-      }
-
-      const renderer = new PeriodicClassicalFieldRenderer(host);
-      rendererRef.current = renderer;
-
-      void renderer.init().then(() => {
-        if (disposed) {
-          renderer.destroy();
-          return;
-        }
-
-        setRendererStatus('ready');
-        renderFrameRef.current(frameChannelRef.current?.getLatest() ?? snapshotRef.current);
-      }).catch(() => {
+    void loadRendererModule()
+      .then(({ PeriodicClassicalFieldRenderer }) => {
         if (disposed) {
           return;
         }
 
-        renderer.destroy();
-        rendererRef.current = null;
+        const renderer = new PeriodicClassicalFieldRenderer(host);
+        rendererRef.current = renderer;
+
+        void renderer
+          .init()
+          .then(() => {
+            if (disposed) {
+              renderer.destroy();
+              return;
+            }
+
+            setRendererStatus('ready');
+            renderFrameRef.current(
+              frameChannelRef.current?.getLatest() ?? snapshotRef.current,
+            );
+          })
+          .catch(() => {
+            if (disposed) {
+              return;
+            }
+
+            renderer.destroy();
+            rendererRef.current = null;
+            setRendererStatus('error');
+          });
+      })
+      .catch(() => {
+        if (disposed) {
+          return;
+        }
+
+        rendererModulePromise = null;
         setRendererStatus('error');
       });
-    }).catch(() => {
-      if (disposed) {
-        return;
-      }
-
-      rendererModulePromise = null;
-      setRendererStatus('error');
-    });
 
     return () => {
       disposed = true;
@@ -220,10 +211,6 @@ export function PrototypeCanvas({
     snapshot.kind === 'quantum-1d-fixed' ||
     snapshot.kind === 'quantum-2d-display';
   const legend = buildLegend(quantity, frameInfo, isQuantum);
-  const showRingCenter =
-    oneDView !== 'plot' &&
-    (snapshot.kind === 'classical-1d-periodic' || snapshot.kind === 'quantum-1d-periodic') &&
-    rendererStatus === 'ready';
 
   return (
     <section className="visual-panel">
@@ -234,63 +221,8 @@ export function PrototypeCanvas({
           ref={hostRef}
           role="img"
         />
-        {showRingCenter && centerInfo !== undefined ? (
-          // Purely visual duplicate of the status strip below; hidden from
-          // the accessibility tree to avoid double announcements.
-          <div
-            aria-hidden="true"
-            className="ring-center-overlay"
-          >
-            <div className="ring-center-content">
-              {legend.phase ? (
-                <span
-                  aria-hidden="true"
-                  className="phase-wheel phase-wheel-center"
-                  style={{ background: getPhaseWheelCssGradient() }}
-                />
-              ) : null}
-              {legend.combined ? (
-                <p className="ring-center-trace-legend">
-                  <span className="trace-swatch trace-swatch-real" /> Re&nbsp;&psi;
-                  <span className="trace-swatch trace-swatch-imaginary" /> Im&nbsp;&psi;
-                  <br />
-                  <span className="ring-center-range">
-                    &minus;{legend.maxLabel} to +{legend.maxLabel}
-                  </span>
-                </p>
-              ) : null}
-              <dl className="ring-center-grid">
-                <div>
-                  <dt>t</dt>
-                  <dd>{centerInfo.time.toFixed(3)}</dd>
-                </div>
-                <div>
-                  <dt>Sites</dt>
-                  <dd>{centerInfo.resolutionLabel}</dd>
-                </div>
-                <div>
-                  <dt>{centerInfo.conservationLabel}</dt>
-                  <dd>{centerInfo.conservationValue}</dd>
-                </div>
-                <div>
-                  <dt>Speed</dt>
-                  <dd>
-                    {centerInfo.requestedSpeed.toFixed(1)}&times;
-                    {centerInfo.achievedSpeedRatio !== null
-                      ? ` (${centerInfo.achievedSpeedRatio.toFixed(2)}×)`
-                      : ''}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-        ) : null}
         {rendererStatus !== 'ready' ? (
-          <div
-            aria-live="polite"
-            className="visual-loading"
-            role="status"
-          >
+          <div aria-live="polite" className="visual-loading" role="status">
             {rendererStatus === 'loading'
               ? 'Loading renderer'
               : 'Renderer failed to load'}
@@ -318,7 +250,8 @@ export function PrototypeCanvas({
               <span className="trace-swatch trace-swatch-real" /> Re&nbsp;&psi;
             </span>
             <span className="legend-label">
-              <span className="trace-swatch trace-swatch-imaginary" /> Im&nbsp;&psi;
+              <span className="trace-swatch trace-swatch-imaginary" />{' '}
+              Im&nbsp;&psi;
             </span>
             <span className="legend-label">
               shared scale &minus;{legend.maxLabel} to +{legend.maxLabel}
@@ -332,8 +265,8 @@ export function PrototypeCanvas({
               style={{ background: getPhaseWheelCssGradient() }}
             />
             <span className="legend-label">
-              hue = phase arg &psi; (&minus;&pi; to +&pi;), fade = |&psi;| from 0 to{' '}
-              {legend.maxLabel}
+              hue = phase arg &psi; (&minus;&pi; to +&pi;), fade = |&psi;| from
+              0 to {legend.maxLabel}
             </span>
           </div>
         ) : (
@@ -353,13 +286,17 @@ export function PrototypeCanvas({
   );
 }
 
-type RendererModule = typeof import('../../rendering/pixi/PeriodicClassicalFieldRenderer');
-type RendererInstance = InstanceType<RendererModule['PeriodicClassicalFieldRenderer']>;
+type RendererModule =
+  typeof import('../../rendering/pixi/PeriodicClassicalFieldRenderer');
+type RendererInstance = InstanceType<
+  RendererModule['PeriodicClassicalFieldRenderer']
+>;
 
 let rendererModulePromise: Promise<RendererModule> | null = null;
 
 function loadRendererModule(): Promise<RendererModule> {
-  rendererModulePromise ??= import('../../rendering/pixi/PeriodicClassicalFieldRenderer');
+  rendererModulePromise ??=
+    import('../../rendering/pixi/PeriodicClassicalFieldRenderer');
   return rendererModulePromise;
 }
 
@@ -384,7 +321,8 @@ function buildLegend(
   combined: boolean;
   maxLabel: string;
 } {
-  const signed = !isUnsignedQuantity(quantity) && quantity !== 'phase-magnitude';
+  const signed =
+    !isUnsignedQuantity(quantity) && quantity !== 'phase-magnitude';
   const phase = quantity === 'phase-magnitude';
   const combined = quantity === 'real-imaginary-parts';
   const scaleMax = frameInfo?.scaleMax ?? 1;
@@ -406,7 +344,10 @@ function buildLegend(
   };
 }
 
-function getQuantityLabel(quantity: RendererQuantity, isQuantum: boolean): string {
+function getQuantityLabel(
+  quantity: RendererQuantity,
+  isQuantum: boolean,
+): string {
   switch (quantity) {
     case 'displacement':
       return 'Displacement';

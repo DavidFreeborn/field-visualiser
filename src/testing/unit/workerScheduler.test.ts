@@ -40,7 +40,7 @@ class SlowFakeWorker {
         time: request.type === 'set-time' ? request.targetTime : 0,
         systemLabel: '2D torus',
         boundaryCondition: 'periodic',
-        modeLabel: 'free-field one-particle',
+        modeLabel: 'square-root lattice quantum model',
         quantity: 'probability-density',
         width: 8,
         height: 8,
@@ -62,10 +62,17 @@ class SlowFakeWorker {
   }
 }
 
-function createScheduler(): { scheduler: Quantum2DWorkerScheduler; worker: SlowFakeWorker } {
+function createScheduler(): {
+  scheduler: Quantum2DWorkerScheduler;
+  worker: SlowFakeWorker;
+} {
   const worker = new SlowFakeWorker();
   const scheduler = new Quantum2DWorkerScheduler(worker);
-  scheduler.configure('torus-periodic', defaultQuantum2DTorusConfig, 'probability-density');
+  scheduler.configure(
+    'torus-periodic',
+    defaultQuantum2DTorusConfig,
+    'probability-density',
+  );
   return { scheduler, worker };
 }
 
@@ -121,7 +128,11 @@ describe('Quantum2DWorkerScheduler', () => {
     scheduler.requestTime(1);
 
     // Reconfigure (reset) while the configure request is still unanswered.
-    scheduler.configure('torus-periodic', defaultQuantum2DTorusConfig, 'probability-density');
+    scheduler.configure(
+      'torus-periodic',
+      defaultQuantum2DTorusConfig,
+      'probability-density',
+    );
 
     // The reply to the first (old-generation) request must be reported stale.
     expect(scheduler.handleResponse(worker.replyToNext())).toBe('stale');
@@ -160,7 +171,11 @@ describe('Quantum2DWorkerScheduler', () => {
   it('a reset invalidates pending work immediately (desired time returns to zero)', () => {
     const { scheduler, worker } = createScheduler();
     scheduler.requestTime(42);
-    scheduler.configure('torus-periodic', defaultQuantum2DTorusConfig, 'probability-density');
+    scheduler.configure(
+      'torus-periodic',
+      defaultQuantum2DTorusConfig,
+      'probability-density',
+    );
 
     expect(scheduler.newestDesiredTime).toBe(0);
 
@@ -168,7 +183,9 @@ describe('Quantum2DWorkerScheduler', () => {
     // sent because the desired time (0) matches the configured time.
     scheduler.handleResponse(worker.replyToNext());
     scheduler.handleResponse(worker.replyToNext());
-    expect(worker.requests.filter((request) => request.type === 'set-time')).toHaveLength(0);
+    expect(
+      worker.requests.filter((request) => request.type === 'set-time'),
+    ).toHaveLength(0);
   });
 
   it('pause and resume produce no time drift (only explicit targets are sent)', () => {

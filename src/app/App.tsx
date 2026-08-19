@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PrototypeCanvas } from '../components/layout/PrototypeCanvas';
 import { SimulationShell } from '../components/layout/SimulationShell';
 import { Classical2DControls } from '../components/panels/Classical2DControls';
-import { DisplayControls } from '../components/panels/DisplayControls';
-import { StatusStrip } from '../components/panels/StatusStrip';
 import { type AppMode } from '../components/panels/ModeSwitch';
-import { type Geometry, type Geometry1D, type Geometry2D } from '../components/panels/GeometrySwitch';
+import {
+  type Geometry,
+  type Geometry1D,
+  type Geometry2D,
+} from '../components/panels/GeometrySwitch';
 import { PrototypeControls } from '../components/panels/PrototypeControls';
 import { Quantum2DControls } from '../components/panels/Quantum2DControls';
 import { QuantumPrototypeControls } from '../components/panels/QuantumPrototypeControls';
@@ -23,7 +25,11 @@ import { usePeriodicClassicalPrototype } from './state/usePeriodicClassicalProto
 import { usePeriodicQuantumPrototype } from './state/usePeriodicQuantumPrototype';
 import { useFixedClassicalPrototype } from './state/useFixedClassicalPrototype';
 import { useFixedQuantumPrototype } from './state/useFixedQuantumPrototype';
-import { buildSceneSearch, parseSceneState, type SceneStateV1 } from './state/sceneState';
+import {
+  buildSceneSearch,
+  parseSceneState,
+  type SceneStateV1,
+} from './state/sceneState';
 
 interface AppProps {
   readonly embedded?: boolean;
@@ -31,19 +37,26 @@ interface AppProps {
 
 export function App({ embedded = false }: AppProps): React.JSX.Element {
   const initialSceneRef = useRef<SceneStateV1 | null>(
-    typeof window === 'undefined' ? null : parseSceneState(window.location.search),
+    typeof window === 'undefined'
+      ? null
+      : parseSceneState(window.location.search),
   );
-  const [mode, setMode] = useState<AppMode>(initialSceneRef.current?.mode ?? 'classical');
-  const [geometry, setGeometry] = useState<Geometry>(initialSceneRef.current?.geometry ?? 'periodic-circle');
+  const [mode, setMode] = useState<AppMode>(
+    initialSceneRef.current?.mode ?? 'classical',
+  );
+  const [geometry, setGeometry] = useState<Geometry>(
+    initialSceneRef.current?.geometry ?? 'periodic-circle',
+  );
   const [oneDView, setOneDView] = useState<'plot' | 'ring'>(
     // The circle is the primary representation of periodic 1D topology.
     initialSceneRef.current?.view1d ?? 'ring',
   );
-  const [scaleMode, setScaleMode] = useState<'auto' | 'fixed' | 'normalize'>(
-    initialSceneRef.current?.scaleMode ?? 'auto',
+  const classicalController = usePeriodicClassicalPrototype(
+    mode === 'classical',
   );
-  const classicalController = usePeriodicClassicalPrototype(mode === 'classical');
-  const quantumController = usePeriodicQuantumPrototype(mode === 'quantum-one-particle');
+  const quantumController = usePeriodicQuantumPrototype(
+    mode === 'quantum-one-particle',
+  );
   const fixedClassicalController = useFixedClassicalPrototype(
     mode === 'classical' && geometry === 'fixed-interval',
   );
@@ -67,7 +80,51 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
     mode === 'quantum-one-particle' && geometry === 'torus-periodic',
   );
 
+  const controllerFor = (
+    forMode: AppMode,
+    forGeometry: Geometry,
+  ):
+    | typeof classicalController
+    | typeof fixedClassicalController
+    | typeof square2DController
+    | typeof quantumController
+    | typeof fixedQuantumController
+    | typeof square2DQuantumController => {
+    if (forMode === 'classical') {
+      return isPeriodicCircleGeometry(forGeometry)
+        ? classicalController
+        : forGeometry === 'fixed-interval'
+          ? fixedClassicalController
+          : forGeometry === 'square-fixed'
+            ? square2DController
+            : torus2DController;
+    }
+
+    return isPeriodicCircleGeometry(forGeometry)
+      ? quantumController
+      : forGeometry === 'fixed-interval'
+        ? fixedQuantumController
+        : forGeometry === 'square-fixed'
+          ? square2DQuantumController
+          : torus2DQuantumController;
+  };
+
+  // The two periodic circle geometries are two visual representations of the
+  // same physical periodic 1D system (and share a controller), so switching
+  // between them may preserve the physical state. Every other mode/geometry
+  // switch targets a physically different model and must start at time zero.
+  const physicalModelKey = (forMode: AppMode, forGeometry: Geometry): string =>
+    `${forMode}:${isPeriodicCircleGeometry(forGeometry) ? 'periodic-circle' : forGeometry}`;
+
   const handleModeChange = (nextMode: AppMode): void => {
+    if (
+      physicalModelKey(nextMode, geometry) !== physicalModelKey(mode, geometry)
+    ) {
+      // Reset synchronously so the destination publishes a fresh time-zero
+      // frame before the canvas re-subscribes - no stale frame can flash.
+      controllerFor(nextMode, geometry).reset();
+    }
+
     setMode(nextMode);
   };
 
@@ -76,6 +133,13 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
     // destination supports it (e.g. classical energy density survives moving
     // from the ring to the 2D torus).
     const currentQuantity = activeController.quantity;
+
+    if (
+      physicalModelKey(mode, nextGeometry) !== physicalModelKey(mode, geometry)
+    ) {
+      controllerFor(mode, nextGeometry).reset();
+    }
+
     setGeometry(nextGeometry);
 
     if (mode === 'classical') {
@@ -98,7 +162,9 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
 
     if (isGeometry2D(nextGeometry)) {
       const destination =
-        nextGeometry === 'torus-periodic' ? torus2DQuantumController : square2DQuantumController;
+        nextGeometry === 'torus-periodic'
+          ? torus2DQuantumController
+          : square2DQuantumController;
       if (
         currentQuantity === 'probability-density' ||
         currentQuantity === 'magnitude' ||
@@ -112,7 +178,9 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
     }
 
     const destination =
-      nextGeometry === 'fixed-interval' ? fixedQuantumController : quantumController;
+      nextGeometry === 'fixed-interval'
+        ? fixedQuantumController
+        : quantumController;
     if (
       currentQuantity === 'probability-density' ||
       currentQuantity === 'magnitude' ||
@@ -142,14 +210,21 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
             ? square2DQuantumController
             : torus2DQuantumController;
   const classical1DBranch =
-    geometry === 'fixed-interval' ? fixedClassicalController : classicalController;
+    geometry === 'fixed-interval'
+      ? fixedClassicalController
+      : classicalController;
   const classical2DBranch =
     geometry === 'torus-periodic' ? torus2DController : square2DController;
-  const quantum1DBranch = geometry === 'fixed-interval' ? fixedQuantumController : quantumController;
+  const quantum1DBranch =
+    geometry === 'fixed-interval' ? fixedQuantumController : quantumController;
   const quantum2DBranch =
-    geometry === 'torus-periodic' ? torus2DQuantumController : square2DQuantumController;
+    geometry === 'torus-periodic'
+      ? torus2DQuantumController
+      : square2DQuantumController;
   const restoreCompleteRef = useRef(false);
-  const restoreControllersRef = useRef<Parameters<typeof applySceneState>[1] | null>(null);
+  const restoreControllersRef = useRef<
+    Parameters<typeof applySceneState>[1] | null
+  >(null);
 
   restoreControllersRef.current = {
     setMode,
@@ -196,138 +271,137 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
 
   const activeSceneState = useMemo<SceneStateV1>(() => {
     const baseScene = ((): SceneStateV1 => {
-    switch (`${mode}:${geometry}`) {
-      case 'classical:periodic-circle':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: classicalController.quantity,
-          circleLayout: classicalController.circleLayout,
-          playing: classicalController.playing,
-          speed: classicalController.speed,
-          showLattice: classicalController.showLattice,
-          showSprings: classicalController.showSprings,
-          config: classicalController.config,
-        };
-      case 'classical:periodic-circle-fixed':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: classicalController.quantity,
-          playing: classicalController.playing,
-          speed: classicalController.speed,
-          showLattice: classicalController.showLattice,
-          showSprings: classicalController.showSprings,
-          config: classicalController.config,
-        };
-      case 'classical:fixed-interval':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: fixedClassicalController.quantity,
-          playing: fixedClassicalController.playing,
-          speed: fixedClassicalController.speed,
-          showLattice: fixedClassicalController.showLattice,
-          showSprings: fixedClassicalController.showSprings,
-          config: fixedClassicalController.config,
-        };
-      case 'classical:square-fixed':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: square2DController.quantity,
-          playing: square2DController.playing,
-          speed: square2DController.speed,
-          showLattice: square2DController.showLattice,
-          showSprings: false,
-          config: square2DController.config,
-        };
-      case 'classical:torus-periodic':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: torus2DController.quantity,
-          playing: torus2DController.playing,
-          speed: torus2DController.speed,
-          showLattice: torus2DController.showLattice,
-          showSprings: false,
-          config: torus2DController.config,
-        };
-      case 'quantum-one-particle:periodic-circle':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: quantumController.quantity,
-          playing: quantumController.playing,
-          speed: quantumController.speed,
-          showLattice: quantumController.showLattice,
-          showSprings: false,
-          config: quantumController.config,
-        };
-      case 'quantum-one-particle:periodic-circle-fixed':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: quantumController.quantity,
-          playing: quantumController.playing,
-          speed: quantumController.speed,
-          showLattice: quantumController.showLattice,
-          showSprings: false,
-          config: quantumController.config,
-        };
-      case 'quantum-one-particle:fixed-interval':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: fixedQuantumController.quantity,
-          playing: fixedQuantumController.playing,
-          speed: fixedQuantumController.speed,
-          showLattice: fixedQuantumController.showLattice,
-          showSprings: false,
-          config: fixedQuantumController.config,
-        };
-      case 'quantum-one-particle:square-fixed':
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: square2DQuantumController.quantity,
-          playing: square2DQuantumController.playing,
-          speed: square2DQuantumController.speed,
-          showLattice: square2DQuantumController.showLattice,
-          showSprings: false,
-          config: square2DQuantumController.config,
-        };
-      case 'quantum-one-particle:torus-periodic':
-      default:
-        return {
-          v: 1,
-          mode,
-          geometry,
-          quantity: torus2DQuantumController.quantity,
-          playing: torus2DQuantumController.playing,
-          speed: torus2DQuantumController.speed,
-          showLattice: torus2DQuantumController.showLattice,
-          showSprings: false,
-          config: torus2DQuantumController.config,
-        };
-    }
+      switch (`${mode}:${geometry}`) {
+        case 'classical:periodic-circle':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: classicalController.quantity,
+            circleLayout: classicalController.circleLayout,
+            playing: classicalController.playing,
+            speed: classicalController.speed,
+            showLattice: classicalController.showLattice,
+            showSprings: classicalController.showSprings,
+            config: classicalController.config,
+          };
+        case 'classical:periodic-circle-fixed':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: classicalController.quantity,
+            playing: classicalController.playing,
+            speed: classicalController.speed,
+            showLattice: classicalController.showLattice,
+            showSprings: classicalController.showSprings,
+            config: classicalController.config,
+          };
+        case 'classical:fixed-interval':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: fixedClassicalController.quantity,
+            playing: fixedClassicalController.playing,
+            speed: fixedClassicalController.speed,
+            showLattice: fixedClassicalController.showLattice,
+            showSprings: fixedClassicalController.showSprings,
+            config: fixedClassicalController.config,
+          };
+        case 'classical:square-fixed':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: square2DController.quantity,
+            playing: square2DController.playing,
+            speed: square2DController.speed,
+            showLattice: square2DController.showLattice,
+            showSprings: false,
+            config: square2DController.config,
+          };
+        case 'classical:torus-periodic':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: torus2DController.quantity,
+            playing: torus2DController.playing,
+            speed: torus2DController.speed,
+            showLattice: torus2DController.showLattice,
+            showSprings: false,
+            config: torus2DController.config,
+          };
+        case 'quantum-one-particle:periodic-circle':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: quantumController.quantity,
+            playing: quantumController.playing,
+            speed: quantumController.speed,
+            showLattice: quantumController.showLattice,
+            showSprings: false,
+            config: quantumController.config,
+          };
+        case 'quantum-one-particle:periodic-circle-fixed':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: quantumController.quantity,
+            playing: quantumController.playing,
+            speed: quantumController.speed,
+            showLattice: quantumController.showLattice,
+            showSprings: false,
+            config: quantumController.config,
+          };
+        case 'quantum-one-particle:fixed-interval':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: fixedQuantumController.quantity,
+            playing: fixedQuantumController.playing,
+            speed: fixedQuantumController.speed,
+            showLattice: fixedQuantumController.showLattice,
+            showSprings: false,
+            config: fixedQuantumController.config,
+          };
+        case 'quantum-one-particle:square-fixed':
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: square2DQuantumController.quantity,
+            playing: square2DQuantumController.playing,
+            speed: square2DQuantumController.speed,
+            showLattice: square2DQuantumController.showLattice,
+            showSprings: false,
+            config: square2DQuantumController.config,
+          };
+        case 'quantum-one-particle:torus-periodic':
+        default:
+          return {
+            v: 1,
+            mode,
+            geometry,
+            quantity: torus2DQuantumController.quantity,
+            playing: torus2DQuantumController.playing,
+            speed: torus2DQuantumController.speed,
+            showLattice: torus2DQuantumController.showLattice,
+            showSprings: false,
+            config: torus2DQuantumController.config,
+          };
+      }
     })();
 
-    return { ...baseScene, view1d: oneDView, scaleMode };
+    return { ...baseScene, view1d: oneDView };
   }, [
     mode,
     geometry,
     oneDView,
-    scaleMode,
     classicalController.circleLayout,
     classicalController.config,
     classicalController.playing,
@@ -379,12 +453,20 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
     }
 
     const timeoutId = window.setTimeout(() => {
-      const nextSearch = buildSceneSearch(activeSceneState, window.location.search, {
-        preserveEmbed: true,
-      });
+      const nextSearch = buildSceneSearch(
+        activeSceneState,
+        window.location.search,
+        {
+          preserveEmbed: true,
+        },
+      );
 
       if (`${window.location.search}` !== nextSearch) {
-        window.history.replaceState({}, '', `${window.location.pathname}${nextSearch}`);
+        window.history.replaceState(
+          {},
+          '',
+          `${window.location.pathname}${nextSearch}`,
+        );
       }
     }, 150);
 
@@ -393,20 +475,6 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
     };
   }, [activeSceneState]);
 
-  const statusSnapshot = activeController.snapshot;
-  const statusDiagnostics = activeController.diagnostics;
-  const resolutionLabel =
-    'siteCount' in statusSnapshot
-      ? `${statusSnapshot.siteCount}`
-      : `${statusSnapshot.width} × ${statusSnapshot.height}`;
-  const normError =
-    'normError' in statusDiagnostics ? statusDiagnostics.normError : undefined;
-  const energyDrift =
-    'relativeEnergyDrift' in statusDiagnostics
-      ? statusDiagnostics.relativeEnergyDrift
-      : undefined;
-  const fieldStats =
-    'fieldStats' in activeController ? activeController.fieldStats : null;
   const stationaryNote =
     mode === 'quantum-one-particle' &&
     activeController.config.initialPreset === 'selected-normal-mode' &&
@@ -414,116 +482,115 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
       activeController.quantity === 'magnitude')
       ? 'A single normal mode is a stationary state: only its global phase evolves in time, so its probability distribution stays constant. Choose the real part, imaginary part, or complex-amplitude view to see the phase rotate.'
       : undefined;
-  const centerInfo = isPeriodicCircleGeometry(geometry)
-    ? {
-        time: activeController.displayTime,
-        resolutionLabel,
-        conservationLabel: normError !== undefined ? 'Norm err' : 'E drift',
-        conservationValue:
-          normError !== undefined
-            ? normError.toExponential(1)
-            : (energyDrift ?? 0).toExponential(1),
-        requestedSpeed: activeController.speed,
-        achievedSpeedRatio: activeController.achievedSpeedRatio,
-      }
-    : undefined;
 
   return (
     <SimulationShell embedded={embedded}>
-      <section className="scene-layout">
+      <section
+        className="scene-layout"
+        data-display-time={activeController.displayTime}
+        data-testid="scene-layout"
+      >
         <div className="control-column">
-        {mode === 'classical' && isGeometry2D(geometry) ? (
-          <Classical2DControls
-            config={classical2DBranch.config}
-            geometry={geometry}
-            mode={mode}
-            playing={classical2DBranch.playing}
-            quantity={classical2DBranch.quantity}
-            showLattice={classical2DBranch.showLattice}
-            speed={classical2DBranch.speed}
-            onConfigChange={classical2DBranch.setConfig}
-            onGeometryChange={(next) => handleGeometryChange(next)}
-            onModeChange={handleModeChange}
-            onPlayingChange={classical2DBranch.setPlaying}
-            onQuantityChange={classical2DBranch.setQuantity}
-            onReset={classical2DBranch.reset}
-            onShowLatticeChange={classical2DBranch.setShowLattice}
-            onSpeedChange={classical2DBranch.setSpeed}
-            onStep={classical2DBranch.stepOnce}
-          />
-        ) : mode === 'classical' ? (
-          <PrototypeControls
-            config={classical1DBranch.config}
-            geometry={geometry as Geometry1D}
-            mode={mode}
-            playing={classical1DBranch.playing}
-            quantity={classical1DBranch.quantity}
-            circleLayout={classicalController.circleLayout}
-            showLattice={classical1DBranch.showLattice}
-            showSprings={classical1DBranch.showSprings}
-            speed={classical1DBranch.speed}
-            onConfigChange={classical1DBranch.setConfig}
-            onModeChange={handleModeChange}
-            onGeometryChange={(next) => handleGeometryChange(next)}
-            onPlayingChange={classical1DBranch.setPlaying}
-            onQuantityChange={classical1DBranch.setQuantity}
-            onCircleLayoutChange={classicalController.setCircleLayout}
-            onReset={classical1DBranch.reset}
-            onShowLatticeChange={classical1DBranch.setShowLattice}
-            onShowSpringsChange={classical1DBranch.setShowSprings}
-            onSpeedChange={classical1DBranch.setSpeed}
-            onStep={classical1DBranch.stepOnce}
-          />
-        ) : mode === 'quantum-one-particle' && isGeometry2D(geometry) ? (
-          <Quantum2DControls
-            config={quantum2DBranch.config}
-            geometry={geometry}
-            mode={mode}
-            playing={quantum2DBranch.playing}
-            quantity={quantum2DBranch.quantity}
-            showLattice={quantum2DBranch.showLattice}
-            speed={quantum2DBranch.speed}
-            onConfigChange={quantum2DBranch.setConfig}
-            onGeometryChange={(next) => handleGeometryChange(next)}
-            onModeChange={handleModeChange}
-            onPlayingChange={quantum2DBranch.setPlaying}
-            onQuantityChange={quantum2DBranch.setQuantity}
-            onReset={quantum2DBranch.reset}
-            onShowLatticeChange={quantum2DBranch.setShowLattice}
-            onSpeedChange={quantum2DBranch.setSpeed}
-            onStep={quantum2DBranch.stepOnce}
-          />
-        ) : (
-          <QuantumPrototypeControls
-            config={quantum1DBranch.config}
-            geometry={geometry as Geometry1D}
-            mode={mode}
-            playing={quantum1DBranch.playing}
-            quantity={quantum1DBranch.quantity}
-            showLattice={quantum1DBranch.showLattice}
-            speed={quantum1DBranch.speed}
-            onConfigChange={quantum1DBranch.setConfig}
-            onModeChange={handleModeChange}
-            onGeometryChange={(next) => handleGeometryChange(next)}
-            onPlayingChange={quantum1DBranch.setPlaying}
-            onQuantityChange={quantum1DBranch.setQuantity}
-            onReset={quantum1DBranch.reset}
-            onShowLatticeChange={quantum1DBranch.setShowLattice}
-            onSpeedChange={quantum1DBranch.setSpeed}
-            onStep={quantum1DBranch.stepOnce}
-          />
-        )}
-          <DisplayControls
-            scaleMode={scaleMode}
-            showViewChoice={isPeriodicCircleGeometry(geometry)}
-            view1d={oneDView}
-            onScaleModeChange={setScaleMode}
-            onView1dChange={setOneDView}
-          />
+          {mode === 'classical' && isGeometry2D(geometry) ? (
+            <Classical2DControls
+              config={classical2DBranch.config}
+              geometry={geometry}
+              mode={mode}
+              playing={classical2DBranch.playing}
+              quantity={classical2DBranch.quantity}
+              showLattice={classical2DBranch.showLattice}
+              speed={classical2DBranch.speed}
+              onConfigChange={classical2DBranch.setConfig}
+              onGeometryChange={(next) => handleGeometryChange(next)}
+              onModeChange={handleModeChange}
+              onPlayingChange={classical2DBranch.setPlaying}
+              onQuantityChange={classical2DBranch.setQuantity}
+              onReset={classical2DBranch.reset}
+              onShowLatticeChange={classical2DBranch.setShowLattice}
+              onSpeedChange={classical2DBranch.setSpeed}
+              onStep={classical2DBranch.stepOnce}
+            />
+          ) : mode === 'classical' ? (
+            <PrototypeControls
+              config={classical1DBranch.config}
+              geometry={geometry as Geometry1D}
+              mode={mode}
+              playing={classical1DBranch.playing}
+              quantity={classical1DBranch.quantity}
+              circleLayout={classicalController.circleLayout}
+              showLattice={classical1DBranch.showLattice}
+              showSprings={classical1DBranch.showSprings}
+              speed={classical1DBranch.speed}
+              onConfigChange={(next) => {
+                if (geometry === 'fixed-interval') {
+                  fixedClassicalController.setConfig(
+                    next as Parameters<
+                      typeof fixedClassicalController.setConfig
+                    >[0],
+                  );
+                } else {
+                  classicalController.setConfig(
+                    next as Parameters<typeof classicalController.setConfig>[0],
+                  );
+                }
+              }}
+              onModeChange={handleModeChange}
+              onGeometryChange={(next) => handleGeometryChange(next)}
+              onPlayingChange={classical1DBranch.setPlaying}
+              onQuantityChange={classical1DBranch.setQuantity}
+              onCircleLayoutChange={classicalController.setCircleLayout}
+              onReset={classical1DBranch.reset}
+              onShowLatticeChange={classical1DBranch.setShowLattice}
+              onShowSpringsChange={classical1DBranch.setShowSprings}
+              onSpeedChange={classical1DBranch.setSpeed}
+              onStep={classical1DBranch.stepOnce}
+              view1d={oneDView}
+              onView1dChange={setOneDView}
+            />
+          ) : mode === 'quantum-one-particle' && isGeometry2D(geometry) ? (
+            <Quantum2DControls
+              config={quantum2DBranch.config}
+              geometry={geometry}
+              mode={mode}
+              playing={quantum2DBranch.playing}
+              quantity={quantum2DBranch.quantity}
+              showLattice={quantum2DBranch.showLattice}
+              speed={quantum2DBranch.speed}
+              onConfigChange={quantum2DBranch.setConfig}
+              onGeometryChange={(next) => handleGeometryChange(next)}
+              onModeChange={handleModeChange}
+              onPlayingChange={quantum2DBranch.setPlaying}
+              onQuantityChange={quantum2DBranch.setQuantity}
+              onReset={quantum2DBranch.reset}
+              onShowLatticeChange={quantum2DBranch.setShowLattice}
+              onSpeedChange={quantum2DBranch.setSpeed}
+              onStep={quantum2DBranch.stepOnce}
+            />
+          ) : (
+            <QuantumPrototypeControls
+              config={quantum1DBranch.config}
+              geometry={geometry as Geometry1D}
+              mode={mode}
+              playing={quantum1DBranch.playing}
+              quantity={quantum1DBranch.quantity}
+              showLattice={quantum1DBranch.showLattice}
+              speed={quantum1DBranch.speed}
+              onConfigChange={quantum1DBranch.setConfig}
+              onModeChange={handleModeChange}
+              onGeometryChange={(next) => handleGeometryChange(next)}
+              onPlayingChange={quantum1DBranch.setPlaying}
+              onQuantityChange={quantum1DBranch.setQuantity}
+              onReset={quantum1DBranch.reset}
+              onShowLatticeChange={quantum1DBranch.setShowLattice}
+              onSpeedChange={quantum1DBranch.setSpeed}
+              onStep={quantum1DBranch.stepOnce}
+              view1d={oneDView}
+              onView1dChange={setOneDView}
+            />
+          )}
         </div>
         <div className="visual-column">
           <PrototypeCanvas
-            centerInfo={centerInfo}
             frameChannel={activeController.frameChannel}
             infoNote={stationaryNote}
             circleLayout={
@@ -533,10 +600,11 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
                 ? classicalController.circleLayout
                 : 'radial'
             }
-            circleGeometryMode={geometry === 'periodic-circle-fixed' ? 'fixed' : 'deformed'}
+            circleGeometryMode={
+              geometry === 'periodic-circle-fixed' ? 'fixed' : 'deformed'
+            }
             oneDView={oneDView}
             quantity={activeController.quantity}
-            scaleMode={scaleMode === 'auto' ? undefined : scaleMode}
             showLattice={activeController.showLattice}
             showSprings={
               mode === 'classical'
@@ -549,18 +617,6 @@ export function App({ embedded = false }: AppProps): React.JSX.Element {
             }
             snapshot={activeController.snapshot}
           />
-          <StatusStrip
-            achievedSpeedRatio={activeController.achievedSpeedRatio}
-            energyDrift={energyDrift}
-            fieldUpdatesPerSecond={fieldStats?.updatesPerSecond}
-            normError={normError}
-            playing={activeController.playing}
-            requestedSpeed={activeController.speed}
-            resolutionLabel={resolutionLabel}
-            spacing={statusSnapshot.spacing}
-            targetLagSeconds={fieldStats?.lagSeconds ?? null}
-            time={activeController.displayTime}
-          />
         </div>
       </section>
     </SimulationShell>
@@ -571,7 +627,9 @@ function isGeometry2D(geometry: Geometry): geometry is Geometry2D {
   return geometry === 'square-fixed' || geometry === 'torus-periodic';
 }
 
-function isPeriodicCircleGeometry(geometry: Geometry): geometry is 'periodic-circle' | 'periodic-circle-fixed' {
+function isPeriodicCircleGeometry(
+  geometry: Geometry,
+): geometry is 'periodic-circle' | 'periodic-circle-fixed' {
   return geometry === 'periodic-circle' || geometry === 'periodic-circle-fixed';
 }
 
@@ -595,18 +653,24 @@ function applySceneState(
 
   switch (`${scene.mode}:${scene.geometry}`) {
     case 'classical:periodic-circle':
-      controllers.classicalController.setConfig(scene.config as typeof defaultClassical1DPeriodicConfig);
+      controllers.classicalController.setConfig(
+        scene.config as typeof defaultClassical1DPeriodicConfig,
+      );
       controllers.classicalController.setQuantity(
         scene.quantity as typeof controllers.classicalController.quantity,
       );
-      controllers.classicalController.setCircleLayout(scene.circleLayout ?? 'radial');
+      controllers.classicalController.setCircleLayout(
+        scene.circleLayout ?? 'radial',
+      );
       controllers.classicalController.setPlaying(scene.playing);
       controllers.classicalController.setSpeed(scene.speed);
       controllers.classicalController.setShowLattice(scene.showLattice);
       controllers.classicalController.setShowSprings(scene.showSprings);
       break;
     case 'classical:periodic-circle-fixed':
-      controllers.classicalController.setConfig(scene.config as typeof defaultClassical1DPeriodicConfig);
+      controllers.classicalController.setConfig(
+        scene.config as typeof defaultClassical1DPeriodicConfig,
+      );
       controllers.classicalController.setQuantity(
         scene.quantity as typeof controllers.classicalController.quantity,
       );
@@ -616,7 +680,9 @@ function applySceneState(
       controllers.classicalController.setShowSprings(scene.showSprings);
       break;
     case 'classical:fixed-interval':
-      controllers.fixedClassicalController.setConfig(scene.config as typeof defaultClassical1DFixedConfig);
+      controllers.fixedClassicalController.setConfig(
+        scene.config as typeof defaultClassical1DFixedConfig,
+      );
       controllers.fixedClassicalController.setQuantity(
         scene.quantity as typeof controllers.fixedClassicalController.quantity,
       );
@@ -626,7 +692,9 @@ function applySceneState(
       controllers.fixedClassicalController.setShowSprings(scene.showSprings);
       break;
     case 'classical:square-fixed':
-      controllers.square2DController.setConfig(scene.config as typeof defaultClassical2DSquareConfig);
+      controllers.square2DController.setConfig(
+        scene.config as typeof defaultClassical2DSquareConfig,
+      );
       controllers.square2DController.setQuantity(
         scene.quantity as typeof controllers.square2DController.quantity,
       );
@@ -635,7 +703,9 @@ function applySceneState(
       controllers.square2DController.setShowLattice(scene.showLattice);
       break;
     case 'classical:torus-periodic':
-      controllers.torus2DController.setConfig(scene.config as typeof defaultClassical2DTorusConfig);
+      controllers.torus2DController.setConfig(
+        scene.config as typeof defaultClassical2DTorusConfig,
+      );
       controllers.torus2DController.setQuantity(
         scene.quantity as typeof controllers.torus2DController.quantity,
       );
@@ -644,7 +714,9 @@ function applySceneState(
       controllers.torus2DController.setShowLattice(scene.showLattice);
       break;
     case 'quantum-one-particle:periodic-circle':
-      controllers.quantumController.setConfig(scene.config as typeof defaultQuantum1DPeriodicConfig);
+      controllers.quantumController.setConfig(
+        scene.config as typeof defaultQuantum1DPeriodicConfig,
+      );
       controllers.quantumController.setQuantity(
         scene.quantity as typeof controllers.quantumController.quantity,
       );
@@ -653,7 +725,9 @@ function applySceneState(
       controllers.quantumController.setShowLattice(scene.showLattice);
       break;
     case 'quantum-one-particle:periodic-circle-fixed':
-      controllers.quantumController.setConfig(scene.config as typeof defaultQuantum1DPeriodicConfig);
+      controllers.quantumController.setConfig(
+        scene.config as typeof defaultQuantum1DPeriodicConfig,
+      );
       controllers.quantumController.setQuantity(
         scene.quantity as typeof controllers.quantumController.quantity,
       );
@@ -662,7 +736,9 @@ function applySceneState(
       controllers.quantumController.setShowLattice(scene.showLattice);
       break;
     case 'quantum-one-particle:fixed-interval':
-      controllers.fixedQuantumController.setConfig(scene.config as typeof defaultQuantum1DFixedConfig);
+      controllers.fixedQuantumController.setConfig(
+        scene.config as typeof defaultQuantum1DFixedConfig,
+      );
       controllers.fixedQuantumController.setQuantity(
         scene.quantity as typeof controllers.fixedQuantumController.quantity,
       );
@@ -671,7 +747,9 @@ function applySceneState(
       controllers.fixedQuantumController.setShowLattice(scene.showLattice);
       break;
     case 'quantum-one-particle:square-fixed':
-      controllers.square2DQuantumController.setConfig(scene.config as typeof defaultQuantum2DSquareConfig);
+      controllers.square2DQuantumController.setConfig(
+        scene.config as typeof defaultQuantum2DSquareConfig,
+      );
       controllers.square2DQuantumController.setQuantity(
         scene.quantity as typeof controllers.square2DQuantumController.quantity,
       );
@@ -680,7 +758,9 @@ function applySceneState(
       controllers.square2DQuantumController.setShowLattice(scene.showLattice);
       break;
     case 'quantum-one-particle:torus-periodic':
-      controllers.torus2DQuantumController.setConfig(scene.config as typeof defaultQuantum2DTorusConfig);
+      controllers.torus2DQuantumController.setConfig(
+        scene.config as typeof defaultQuantum2DTorusConfig,
+      );
       controllers.torus2DQuantumController.setQuantity(
         scene.quantity as typeof controllers.torus2DQuantumController.quantity,
       );

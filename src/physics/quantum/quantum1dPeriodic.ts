@@ -1,5 +1,15 @@
 import { fastForwardDftUnitary, fastInverseDftUnitary } from '../core/fft';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
+import {
+  assertIntegerInRange,
+  assertModeNumberList,
+  assertPositiveFinite,
+  assertResolvableQuantumTime,
+  assertUnitInterval,
+} from '../core/validation';
 import {
   computeDiscreteNorm,
   createQuantumInitialState,
@@ -14,6 +24,8 @@ export interface Quantum1DPeriodicConfig {
   readonly gaussianWidth: number;
   readonly momentumWidth: number;
   readonly modeNumber: number;
+  /** Normal modes summed by the 'selected-normal-mode' preset. */
+  readonly modeNumbers: readonly number[];
   readonly initialPreset: Quantum1DInitialPreset;
 }
 
@@ -30,7 +42,7 @@ export interface Quantum1DPeriodicSnapshot {
   readonly time: number;
   readonly systemLabel: '1D circle';
   readonly boundaryCondition: 'periodic';
-  readonly modeLabel: 'free-field one-particle';
+  readonly modeLabel: 'square-root lattice quantum model';
   readonly quantity: Quantum1DPeriodicQuantity;
   readonly siteCount: number;
   readonly domainLength: number;
@@ -58,7 +70,7 @@ interface SnapshotBuffers {
 }
 
 /**
- * Exact modal evolution of the periodic free-field one-particle state.
+ * Exact modal evolution of the periodic square-root lattice quantum state.
  *
  * The initial modal coefficients are kept immutable; `setTime(t)` derives the
  * coefficients at absolute time `t` directly as c_k(t) = c_k(0) e^{-i w_k t},
@@ -66,14 +78,11 @@ interface SnapshotBuffers {
  * how far the target time is from the current one. There is no CFL-style
  * substepping: the evolution is analytic and stable for any target time.
  */
-export class Quantum1DPeriodicEngine
-  implements
-    SimulationEngine<
-      Quantum1DPeriodicConfig,
-      Quantum1DPeriodicSnapshot,
-      Quantum1DPeriodicDiagnostics
-    >
-{
+export class Quantum1DPeriodicEngine implements SimulationEngine<
+  Quantum1DPeriodicConfig,
+  Quantum1DPeriodicSnapshot,
+  Quantum1DPeriodicDiagnostics
+> {
   private config: Quantum1DPeriodicConfig | null = null;
 
   private time = 0;
@@ -115,7 +124,11 @@ export class Quantum1DPeriodicEngine
     this.config = config;
     this.time = 0;
     this.spacing = config.domainLength / config.siteCount;
-    this.modeFrequencies = buildModeFrequencies(config.siteCount, this.spacing, config.waveSpeed);
+    this.modeFrequencies = buildModeFrequencies(
+      config.siteCount,
+      this.spacing,
+      config.waveSpeed,
+    );
     this.maximumFrequency = this.modeFrequencies.reduce(
       (currentMax, frequency) => Math.max(currentMax, frequency),
       0,
@@ -126,6 +139,7 @@ export class Quantum1DPeriodicEngine
       amplitudeCenter: config.initialCenter,
       gaussianWidth: config.gaussianWidth,
       modeNumber: config.modeNumber,
+      modeNumbers: config.modeNumbers,
       momentumWidth: config.momentumWidth,
     });
 
@@ -150,12 +164,19 @@ export class Quantum1DPeriodicEngine
         this.initialModeImaginary[index] * this.initialModeImaginary[index];
     }
 
-    this.snapshotBuffers = [createSnapshotBuffers(siteCount), createSnapshotBuffers(siteCount)];
+    this.snapshotBuffers = [
+      createSnapshotBuffers(siteCount),
+      createSnapshotBuffers(siteCount),
+    ];
     this.snapshotParity = 0;
   }
 
   /** Advances relative to the current time. Equivalent to setTime(time + dt). */
   public step(dt: number): void {
+    if (!Number.isFinite(dt)) {
+      throw new Error(`dt must be a finite number, received ${String(dt)}.`);
+    }
+
     if (dt <= 0) {
       return;
     }
@@ -172,6 +193,7 @@ export class Quantum1DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
+    assertResolvableQuantumTime(time, this.maximumFrequency);
     this.time = Math.max(0, time);
 
     for (let modeIndex = 0; modeIndex < this.modeReal.length; modeIndex += 1) {
@@ -184,7 +206,12 @@ export class Quantum1DPeriodicEngine
       this.modeImaginary[modeIndex] = real * sinPhase + imaginary * cosPhase;
     }
 
-    fastInverseDftUnitary(this.modeReal, this.modeImaginary, this.siteReal, this.siteImaginary);
+    fastInverseDftUnitary(
+      this.modeReal,
+      this.modeImaginary,
+      this.siteReal,
+      this.siteImaginary,
+    );
     this.inverseTransformCount += 1;
   }
 
@@ -216,7 +243,7 @@ export class Quantum1DPeriodicEngine
       time: this.time,
       systemLabel: '1D circle',
       boundaryCondition: 'periodic',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity,
       siteCount: this.config.siteCount,
       domainLength: this.config.domainLength,
@@ -234,7 +261,8 @@ export class Quantum1DPeriodicEngine
     const totalNorm = computeDiscreteNorm(this.modeReal, this.modeImaginary);
     const recommendedDt =
       this.maximumFrequency > 0
-        ? (2 * Math.PI) / (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
+        ? (2 * Math.PI) /
+          (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
         : 0.05;
 
     return {
@@ -265,7 +293,8 @@ function buildModeFrequencies(
 
   for (let modeIndex = 0; modeIndex < siteCount; modeIndex += 1) {
     frequencies[modeIndex] =
-      (2 * waveSpeed * Math.abs(Math.sin((Math.PI * modeIndex) / siteCount))) / spacing;
+      (2 * waveSpeed * Math.abs(Math.sin((Math.PI * modeIndex) / siteCount))) /
+      spacing;
   }
 
   return frequencies;
@@ -276,11 +305,28 @@ function assertValidConfig(config: Quantum1DPeriodicConfig): void {
     throw new Error('siteCount must be an integer greater than or equal to 8.');
   }
 
-  if (config.domainLength <= 0 || config.waveSpeed <= 0) {
-    throw new Error('domainLength and waveSpeed must be positive.');
-  }
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertPositiveFinite(config.momentumWidth, 'momentumWidth');
+  assertUnitInterval(config.initialCenter, 'initialCenter');
+  // Periodic topology: valid carrier/selected modes are 0 .. N-1. Presets with
+  // stricter rules (counterpropagating) check their own degeneracies.
+  assertIntegerInRange(
+    config.modeNumber,
+    'modeNumber',
+    0,
+    config.siteCount - 1,
+  );
 
-  if (config.gaussianWidth <= 0 || config.momentumWidth <= 0) {
-    throw new Error('gaussianWidth and momentumWidth must be positive.');
+  if (config.initialPreset === 'selected-normal-mode') {
+    // Distinct periodic Fourier modes: 0 .. N-1 (the zero mode is a valid
+    // static state on the periodic lattice).
+    assertModeNumberList(
+      config.modeNumbers,
+      'modeNumbers',
+      0,
+      config.siteCount - 1,
+    );
   }
 }

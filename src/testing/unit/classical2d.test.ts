@@ -57,11 +57,7 @@ describe('applyDirichletLaplacian2D', () => {
   it('keeps fixed-edge boundary accelerations clamped to zero', () => {
     const size = 5;
     const field = new Float64Array([
-      0, 0, 0, 0, 0,
-      0, 1, 2, 3, 0,
-      0, 4, 5, 6, 0,
-      0, 7, 8, 9, 0,
-      0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 4, 5, 6, 0, 0, 7, 8, 9, 0, 0, 0, 0, 0, 0,
     ]);
 
     const laplacian = applyDirichletLaplacian2D(field, size, 1);
@@ -90,10 +86,20 @@ describe('Classical2DEngine', () => {
     const snapshot = engine.getSnapshot();
 
     for (let x = 0; x < snapshot.width; x += 1) {
-      expect(snapshot.displacement[flattenIndex2D(x, 0, snapshot.width)]).toBe(0);
-      expect(snapshot.displacement[flattenIndex2D(x, snapshot.height - 1, snapshot.width)]).toBe(0);
+      expect(snapshot.displacement[flattenIndex2D(x, 0, snapshot.width)]).toBe(
+        0,
+      );
+      expect(
+        snapshot.displacement[
+          flattenIndex2D(x, snapshot.height - 1, snapshot.width)
+        ],
+      ).toBe(0);
       expect(snapshot.velocity[flattenIndex2D(x, 0, snapshot.width)]).toBe(0);
-      expect(snapshot.velocity[flattenIndex2D(x, snapshot.height - 1, snapshot.width)]).toBe(0);
+      expect(
+        snapshot.velocity[
+          flattenIndex2D(x, snapshot.height - 1, snapshot.width)
+        ],
+      ).toBe(0);
     }
   });
 
@@ -149,7 +155,9 @@ describe('Classical2DEngine', () => {
       initialSnapshot.displacement[centerIndex],
       2,
     );
-    expect(finalSnapshot.displacement[flattenIndex2D(0, 0, initialSnapshot.width)]).toBe(0);
+    expect(
+      finalSnapshot.displacement[flattenIndex2D(0, 0, initialSnapshot.width)],
+    ).toBe(0);
   });
 
   it('matches the locked baseline for a representative 2D torus classical evolution', () => {
@@ -166,13 +174,22 @@ describe('Classical2DEngine', () => {
     const xIndex = flattenIndex2D(6, 12, snapshot.width);
     const yIndex = flattenIndex2D(12, 6, snapshot.width);
 
+    // Baseline re-locked after the coordinate-convention correction: the
+    // torus Gaussian now samples x/size with the shortest periodic (wrapped)
+    // displacement instead of the fixed-grid x/(size-1) convention.
     expect(snapshot.time).toBeCloseTo(0.10606601717798217, 12);
-    expect(snapshot.displacement[centerIndex]).toBeCloseTo(-0.005826007200347781, 12);
-    expect(snapshot.displacement[xIndex]).toBeCloseTo(0.08024081583100937, 12);
-    expect(snapshot.displacement[yIndex]).toBeCloseTo(0.08024081583100938, 12);
-    expect(snapshot.velocity[centerIndex]).toBeCloseTo(-7.374710521628247, 12);
-    expect(snapshot.totalEnergy).toBeCloseTo(0.9675196335652549, 12);
-    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(0.001619956805519265, 12);
+    expect(snapshot.displacement[centerIndex]).toBeCloseTo(
+      -0.002071347354692818,
+      12,
+    );
+    expect(snapshot.displacement[xIndex]).toBeCloseTo(0.06163687043793235, 12);
+    expect(snapshot.displacement[yIndex]).toBeCloseTo(0.06163687043793235, 12);
+    expect(snapshot.velocity[centerIndex]).toBeCloseTo(-7.942838974759761, 12);
+    expect(snapshot.totalEnergy).toBeCloseTo(0.9704243732002875, 12);
+    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(
+      0.0015993300585713612,
+      12,
+    );
   });
 });
 

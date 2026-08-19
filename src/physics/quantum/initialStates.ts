@@ -11,6 +11,8 @@ export interface QuantumInitialStateOptions {
   readonly amplitudeCenter: number;
   readonly gaussianWidth: number;
   readonly modeNumber: number;
+  /** Normal modes summed by the 'selected-normal-mode' preset. */
+  readonly modeNumbers: readonly number[];
   readonly momentumWidth: number;
 }
 
@@ -25,7 +27,9 @@ export function createQuantumInitialState(
 ): ComplexStateVector {
   switch (preset) {
     case 'site-localized':
-      return normalizeState(createSiteLocalizedState(options.siteCount));
+      return normalizeState(
+        createSiteLocalizedState(options.siteCount, options.amplitudeCenter),
+      );
     case 'gaussian-wavepacket':
       return normalizeState(
         createGaussianWavepacketState(
@@ -36,8 +40,12 @@ export function createQuantumInitialState(
         ),
       );
     case 'selected-normal-mode':
-      return createNormalModeState(options.siteCount, options.modeNumber);
+      return createNormalModesState(options.siteCount, options.modeNumbers);
     case 'counterpropagating-superposition':
+      assertDistinctCounterpropagatingMode(
+        options.modeNumber,
+        options.siteCount,
+      );
       return normalizeState(
         createCounterpropagatingState(
           options.siteCount,
@@ -48,11 +56,43 @@ export function createQuantumInitialState(
   }
 }
 
-function createSiteLocalizedState(siteCount: number): ComplexStateVector {
+/**
+ * A counterpropagating pair needs two genuinely opposite modes: mode zero is
+ * its own mirror, and on an even lattice so is the self-conjugate Nyquist
+ * mode. Both would silently degenerate into a single standing packet.
+ */
+export function assertDistinctCounterpropagatingMode(
+  modeNumber: number,
+  siteCount: number,
+): void {
+  if (modeNumber === 0) {
+    throw new Error(
+      'counterpropagating-superposition requires a nonzero carrier mode: mode 0 has no distinct opposite.',
+    );
+  }
+
+  if (
+    siteCount % 2 === 0 &&
+    ((modeNumber % siteCount) + siteCount) % siteCount === siteCount / 2
+  ) {
+    throw new Error(
+      'counterpropagating-superposition rejects the Nyquist mode on an even lattice: it is self-conjugate and has no distinct opposite.',
+    );
+  }
+}
+
+function createSiteLocalizedState(
+  siteCount: number,
+  center: number,
+): ComplexStateVector {
   const real = new Float64Array(siteCount);
   const imaginary = new Float64Array(siteCount);
 
-  real[Math.floor(siteCount / 2)] = 1;
+  // Periodic seam mapping: a centre near 0.99 wraps to site zero when that
+  // site is nearest.
+  const siteIndex =
+    ((Math.round(center * siteCount) % siteCount) + siteCount) % siteCount;
+  real[siteIndex] = 1;
 
   return { real, imaginary };
 }
@@ -79,15 +119,25 @@ function createGaussianWavepacketState(
   return { real, imaginary };
 }
 
-function createNormalModeState(siteCount: number, modeNumber: number): ComplexStateVector {
+/**
+ * Equal-weight superposition of the selected periodic normal modes,
+ * psi = (1/sqrt(k)) sum_n phi_n. The Fourier modes are orthonormal, so the
+ * norm is exactly one for any selection of distinct modes.
+ */
+function createNormalModesState(
+  siteCount: number,
+  modeNumbers: readonly number[],
+): ComplexStateVector {
   const real = new Float64Array(siteCount);
   const imaginary = new Float64Array(siteCount);
-  const normalization = 1 / Math.sqrt(siteCount);
+  const normalization = 1 / Math.sqrt(siteCount * modeNumbers.length);
 
-  for (let index = 0; index < siteCount; index += 1) {
-    const phase = (2 * Math.PI * modeNumber * index) / siteCount;
-    real[index] = normalization * Math.cos(phase);
-    imaginary[index] = normalization * Math.sin(phase);
+  for (const modeNumber of modeNumbers) {
+    for (let index = 0; index < siteCount; index += 1) {
+      const phase = (2 * Math.PI * modeNumber * index) / siteCount;
+      real[index] += normalization * Math.cos(phase);
+      imaginary[index] += normalization * Math.sin(phase);
+    }
   }
 
   return { real, imaginary };
@@ -105,8 +155,12 @@ function createCounterpropagatingState(
     const wrappedMode = wrapModeDistance(modeIndex, modeNumber, siteCount);
     const mirroredMode = wrapModeDistance(modeIndex, -modeNumber, siteCount);
     const weight =
-      Math.exp(-0.5 * (wrappedMode / momentumWidth) * (wrappedMode / momentumWidth)) +
-      Math.exp(-0.5 * (mirroredMode / momentumWidth) * (mirroredMode / momentumWidth));
+      Math.exp(
+        -0.5 * (wrappedMode / momentumWidth) * (wrappedMode / momentumWidth),
+      ) +
+      Math.exp(
+        -0.5 * (mirroredMode / momentumWidth) * (mirroredMode / momentumWidth),
+      );
 
     weightsReal[modeIndex] = weight;
   }
@@ -135,7 +189,10 @@ export function normalizeState(state: ComplexStateVector): ComplexStateVector {
   return { real, imaginary };
 }
 
-export function computeDiscreteNorm(real: Float64Array, imaginary: Float64Array): number {
+export function computeDiscreteNorm(
+  real: Float64Array,
+  imaginary: Float64Array,
+): number {
   let total = 0;
 
   for (let index = 0; index < real.length; index += 1) {
@@ -164,7 +221,8 @@ export function discreteFourierTransform(
       const sinPhase = Math.sin(phase);
 
       sumReal += real[siteIndex] * cosPhase - imaginary[siteIndex] * sinPhase;
-      sumImaginary += real[siteIndex] * sinPhase + imaginary[siteIndex] * cosPhase;
+      sumImaginary +=
+        real[siteIndex] * sinPhase + imaginary[siteIndex] * cosPhase;
     }
 
     outReal[modeIndex] = normalization * sumReal;
@@ -193,7 +251,8 @@ export function inverseDiscreteFourierTransform(
       const sinPhase = Math.sin(phase);
 
       sumReal += real[modeIndex] * cosPhase - imaginary[modeIndex] * sinPhase;
-      sumImaginary += real[modeIndex] * sinPhase + imaginary[modeIndex] * cosPhase;
+      sumImaginary +=
+        real[modeIndex] * sinPhase + imaginary[modeIndex] * cosPhase;
     }
 
     outReal[siteIndex] = normalization * sumReal;
@@ -209,7 +268,11 @@ function shortestPeriodicDistance(position: number, center: number): number {
   return rawDelta - Math.round(rawDelta);
 }
 
-function wrapModeDistance(modeIndex: number, centerMode: number, siteCount: number): number {
+function wrapModeDistance(
+  modeIndex: number,
+  centerMode: number,
+  siteCount: number,
+): number {
   const rawDelta = modeIndex - centerMode;
 
   return rawDelta - Math.round(rawDelta / siteCount) * siteCount;

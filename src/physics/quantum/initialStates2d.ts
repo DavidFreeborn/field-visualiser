@@ -1,4 +1,6 @@
+import { fastInverseDftUnitary2D } from '../core/fft';
 import { flattenIndex2D } from '../core/grids';
+import { assertIntegerInRange } from '../core/validation';
 import { computeDiscreteNorm, type ComplexStateVector } from './initialStates';
 
 export type Quantum2DInitialPreset =
@@ -23,10 +25,16 @@ export function createPeriodicQuantumInitialState2D(
 ): ComplexStateVector {
   switch (preset) {
     case 'site-localized':
-      return normalize2DState(createSiteLocalizedState2D(options.size, options.centerX, options.centerY));
+      return normalize2DState(
+        createPeriodicSiteLocalizedState2D(
+          options.size,
+          options.centerX,
+          options.centerY,
+        ),
+      );
     case 'gaussian-wavepacket':
       return normalize2DState(
-        createGaussianWavepacketState2D(
+        createPeriodicGaussianWavepacketState2D(
           options.size,
           options.centerX,
           options.centerY,
@@ -42,6 +50,7 @@ export function createPeriodicQuantumInitialState2D(
         options.modeNumberY,
       );
     case 'split-superposition':
+      assertDistinctSplitModeX(options.modeNumberX, options.size);
       return normalize2DState(
         createSplitSuperpositionState2D(
           options.size,
@@ -64,8 +73,8 @@ export function createFixedQuantumInitialState2D(
       return embedInteriorState(
         options.size,
         normalize2DState(
-          createSiteLocalizedState2D(
-            interiorSize,
+          createFixedSiteLocalizedInteriorState2D(
+            options.size,
             options.centerX,
             options.centerY,
           ),
@@ -75,8 +84,8 @@ export function createFixedQuantumInitialState2D(
       return embedInteriorState(
         options.size,
         normalize2DState(
-          createGaussianWavepacketState2D(
-            interiorSize,
+          createFixedGaussianInteriorState2D(
+            options.size,
             options.centerX,
             options.centerY,
             options.gaussianWidth,
@@ -86,7 +95,6 @@ export function createFixedQuantumInitialState2D(
         ),
       );
     case 'selected-normal-mode':
-    case 'split-superposition':
       return embedInteriorState(
         options.size,
         createFixedNormalModeState2D(
@@ -95,6 +103,38 @@ export function createFixedQuantumInitialState2D(
           options.modeNumberY,
         ),
       );
+    case 'split-superposition':
+      // A +kx / -kx split needs periodic topology; on a Dirichlet square it
+      // would silently collapse into a single standing mode, so it is
+      // rejected here and sanitized out of shared scenes upstream.
+      throw new Error(
+        'split-superposition is not available on the fixed square: it requires periodic topology.',
+      );
+  }
+}
+
+/**
+ * The +kx and -kx branches of a split superposition must be distinct: kx = 0
+ * is its own mirror and, on an even lattice, so is the Nyquist mode kx = N/2.
+ * ky = 0 is deliberately allowed - it is often the cleanest genuinely
+ * opposite split.
+ */
+export function assertDistinctSplitModeX(
+  modeNumberX: number,
+  size: number,
+): void {
+  const wrapped = ((modeNumberX % size) + size) % size;
+
+  if (wrapped === 0) {
+    throw new Error(
+      'split-superposition requires modeNumberX != 0: mode 0 has no distinct opposite.',
+    );
+  }
+
+  if (size % 2 === 0 && wrapped === size / 2) {
+    throw new Error(
+      'split-superposition rejects the Nyquist mode on an even lattice: it is self-conjugate and has no distinct opposite.',
+    );
   }
 }
 
@@ -121,7 +161,7 @@ export function discreteFourierTransform2D(
         const cosPhase = basis.cos[basisOffset + x];
         const sinPhase = basis.sin[basisOffset + x];
         sumReal += real[index] * cosPhase + imaginary[index] * sinPhase;
-        sumImaginary += (-real[index] * sinPhase) + imaginary[index] * cosPhase;
+        sumImaginary += -real[index] * sinPhase + imaginary[index] * cosPhase;
       }
 
       rowReal[rowOffset + kx] = basis.normalization * sumReal;
@@ -140,7 +180,8 @@ export function discreteFourierTransform2D(
         const cosPhase = basis.cos[basisOffset + y];
         const sinPhase = basis.sin[basisOffset + y];
         sumReal += rowReal[index] * cosPhase + rowImaginary[index] * sinPhase;
-        sumImaginary += (-rowReal[index] * sinPhase) + rowImaginary[index] * cosPhase;
+        sumImaginary +=
+          -rowReal[index] * sinPhase + rowImaginary[index] * cosPhase;
       }
 
       const modeIndex = flattenIndex2D(kx, ky, size);
@@ -194,8 +235,10 @@ export function inverseDiscreteFourierTransform2D(
         const index = rowOffset + kx;
         const cosPhase = basis.cos[basisOffset + kx];
         const sinPhase = basis.sin[basisOffset + kx];
-        sumReal += columnReal[index] * cosPhase - columnImaginary[index] * sinPhase;
-        sumImaginary += columnReal[index] * sinPhase + columnImaginary[index] * cosPhase;
+        sumReal +=
+          columnReal[index] * cosPhase - columnImaginary[index] * sinPhase;
+        sumImaginary +=
+          columnReal[index] * sinPhase + columnImaginary[index] * cosPhase;
       }
 
       const siteIndex = rowOffset + x;
@@ -360,20 +403,43 @@ export function extractInteriorState(
   };
 }
 
-function createSiteLocalizedState2D(
+function createPeriodicSiteLocalizedState2D(
   size: number,
   centerX: number,
   centerY: number,
 ): ComplexStateVector {
   const real = new Float64Array(size * size);
   const imaginary = new Float64Array(size * size);
-  const x = Math.max(0, Math.min(size - 1, Math.round(centerX * (size - 1))));
-  const y = Math.max(0, Math.min(size - 1, Math.round(centerY * (size - 1))));
+  // Periodic seam mapping per axis: a centre near 0.99 wraps to index zero.
+  const x = ((Math.round(centerX * size) % size) + size) % size;
+  const y = ((Math.round(centerY * size) % size) + size) % size;
   real[flattenIndex2D(x, y, size)] = 1;
   return { real, imaginary };
 }
 
-function createGaussianWavepacketState2D(
+function createFixedSiteLocalizedInteriorState2D(
+  size: number,
+  centerX: number,
+  centerY: number,
+): ComplexStateVector {
+  const interiorSize = size - 2;
+  const real = new Float64Array(interiorSize * interiorSize);
+  const imaginary = new Float64Array(interiorSize * interiorSize);
+  // Full physical coordinate grid x_j = j/(size-1); the nearest site is
+  // clamped into the interior because the boundary is pinned to zero.
+  const fullX = Math.max(
+    1,
+    Math.min(size - 2, Math.round(centerX * (size - 1))),
+  );
+  const fullY = Math.max(
+    1,
+    Math.min(size - 2, Math.round(centerY * (size - 1))),
+  );
+  real[flattenIndex2D(fullX - 1, fullY - 1, interiorSize)] = 1;
+  return { real, imaginary };
+}
+
+function createPeriodicGaussianWavepacketState2D(
   size: number,
   centerX: number,
   centerY: number,
@@ -385,14 +451,50 @@ function createGaussianWavepacketState2D(
   const imaginary = new Float64Array(size * size);
 
   for (let y = 0; y < size; y += 1) {
-    const positionY = size > 1 ? y / (size - 1) : 0;
-    const deltaY = shortestPeriodicDistance(positionY, centerY);
+    const deltaY = shortestPeriodicDistance(y / size, centerY);
     for (let x = 0; x < size; x += 1) {
-      const positionX = size > 1 ? x / (size - 1) : 0;
-      const deltaX = shortestPeriodicDistance(positionX, centerX);
-      const envelope = Math.exp(-0.5 * ((deltaX * deltaX + deltaY * deltaY) / (width * width)));
-      const phase = (2 * Math.PI * ((modeNumberX * x) + (modeNumberY * y))) / Math.max(1, size);
+      const deltaX = shortestPeriodicDistance(x / size, centerX);
+      const envelope = Math.exp(
+        -0.5 * ((deltaX * deltaX + deltaY * deltaY) / (width * width)),
+      );
+      // Periodic carrier convention e^{2 pi i (n_x x + n_y y) / L}.
+      const phase = (2 * Math.PI * (modeNumberX * x + modeNumberY * y)) / size;
       const index = flattenIndex2D(x, y, size);
+      real[index] = envelope * Math.cos(phase);
+      imaginary[index] = envelope * Math.sin(phase);
+    }
+  }
+
+  return { real, imaginary };
+}
+
+function createFixedGaussianInteriorState2D(
+  size: number,
+  centerX: number,
+  centerY: number,
+  width: number,
+  modeNumberX: number,
+  modeNumberY: number,
+): ComplexStateVector {
+  const interiorSize = size - 2;
+  const real = new Float64Array(interiorSize * interiorSize);
+  const imaginary = new Float64Array(interiorSize * interiorSize);
+  const denominator = size - 1;
+
+  for (let y = 0; y < interiorSize; y += 1) {
+    const positionY = (y + 1) / denominator;
+    const deltaY = positionY - centerY;
+    for (let x = 0; x < interiorSize; x += 1) {
+      const positionX = (x + 1) / denominator;
+      const deltaX = positionX - centerX;
+      const envelope = Math.exp(
+        -0.5 * ((deltaX * deltaX + deltaY * deltaY) / (width * width)),
+      );
+      // Dirichlet carrier convention e^{pi i (n_x x + n_y y) / L}, consistent
+      // with the sine modes (NOT the periodic 2 pi convention).
+      const phase =
+        Math.PI * (modeNumberX * positionX + modeNumberY * positionY);
+      const index = flattenIndex2D(x, y, interiorSize);
       real[index] = envelope * Math.cos(phase);
       imaginary[index] = envelope * Math.sin(phase);
     }
@@ -412,7 +514,7 @@ function createPeriodicNormalModeState2D(
 
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
-      const phase = (2 * Math.PI * ((modeNumberX * x) + (modeNumberY * y))) / size;
+      const phase = (2 * Math.PI * (modeNumberX * x + modeNumberY * y)) / size;
       const index = flattenIndex2D(x, y, size);
       real[index] = normalization * Math.cos(phase);
       imaginary[index] = normalization * Math.sin(phase);
@@ -427,12 +529,28 @@ function createFixedNormalModeState2D(
   modeNumberX: number,
   modeNumberY: number,
 ): ComplexStateVector {
-  const modeReal = new Float64Array(interiorSize * interiorSize);
-  const modeImaginary = new Float64Array(interiorSize * interiorSize);
-  const clampedModeX = Math.max(1, Math.min(interiorSize, modeNumberX));
-  const clampedModeY = Math.max(1, Math.min(interiorSize, modeNumberY));
-  modeReal[flattenIndex2D(clampedModeX - 1, clampedModeY - 1, interiorSize)] = 1;
-  return inverseSineTransform2D(modeReal, modeImaginary, interiorSize);
+  assertIntegerInRange(modeNumberX, 'modeNumberX', 1, interiorSize);
+  assertIntegerInRange(modeNumberY, 'modeNumberY', 1, interiorSize);
+
+  // Built analytically as the product of normalized sine factors in O(N^2);
+  // a dense inverse sine transform here would cost O(N^3) per reset.
+  const real = new Float64Array(interiorSize * interiorSize);
+  const imaginary = new Float64Array(interiorSize * interiorSize);
+  const normalization = 2 / (interiorSize + 1);
+
+  for (let y = 0; y < interiorSize; y += 1) {
+    const sineY = Math.sin(
+      (Math.PI * modeNumberY * (y + 1)) / (interiorSize + 1),
+    );
+    for (let x = 0; x < interiorSize; x += 1) {
+      const sineX = Math.sin(
+        (Math.PI * modeNumberX * (x + 1)) / (interiorSize + 1),
+      );
+      real[flattenIndex2D(x, y, interiorSize)] = normalization * sineX * sineY;
+    }
+  }
+
+  return { real, imaginary };
 }
 
 function createSplitSuperpositionState2D(
@@ -465,7 +583,12 @@ function createSplitSuperpositionState2D(
     }
   }
 
-  return inverseDiscreteFourierTransform2D(modeReal, modeImaginary, size);
+  // Fast unitary 2D inverse FFT; the dense separable transform below is kept
+  // only as a reference implementation for equivalence tests.
+  const real = new Float64Array(size * size);
+  const imaginary = new Float64Array(size * size);
+  fastInverseDftUnitary2D(modeReal, modeImaginary, size, real, imaginary);
+  return { real, imaginary };
 }
 
 function normalize2DState(state: ComplexStateVector): ComplexStateVector {
@@ -486,8 +609,14 @@ function normalize2DState(state: ComplexStateVector): ComplexStateVector {
   return { real, imaginary };
 }
 
-const periodicBasisCache = new Map<number, { cos: Float64Array; sin: Float64Array; normalization: number }>();
-const sineBasisCache = new Map<number, { values: Float64Array; normalization: number }>();
+const periodicBasisCache = new Map<
+  number,
+  { cos: Float64Array; sin: Float64Array; normalization: number }
+>();
+const sineBasisCache = new Map<
+  number,
+  { values: Float64Array; normalization: number }
+>();
 
 function getPeriodicBasisCache(size: number): {
   cos: Float64Array;
@@ -550,7 +679,11 @@ function shortestPeriodicDistance(position: number, center: number): number {
   return rawDelta - Math.round(rawDelta);
 }
 
-function wrapModeDistance(modeIndex: number, centerMode: number, size: number): number {
+function wrapModeDistance(
+  modeIndex: number,
+  centerMode: number,
+  size: number,
+): number {
   const rawDelta = modeIndex - centerMode;
   return rawDelta - Math.round(rawDelta / size) * size;
 }

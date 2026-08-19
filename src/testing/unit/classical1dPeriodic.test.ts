@@ -10,7 +10,8 @@ const baseConfig: Classical1DPeriodicConfig = {
   amplitude: 0.5,
   initialCenter: 0.5,
   gaussianWidth: 0.06,
-  initialPreset: 'standing-mode-2',
+  modeNumbers: [2],
+  initialPreset: 'standing-modes',
 };
 
 describe('Classical1DPeriodicEngine', () => {
@@ -65,14 +66,17 @@ describe('Classical1DPeriodicEngine', () => {
     const engine = new Classical1DPeriodicEngine({
       ...baseConfig,
       siteCount: 128,
-      initialPreset: 'standing-mode-2',
+      initialPreset: 'standing-modes',
+      modeNumbers: [2],
     });
 
     const initialSnapshot = engine.getSnapshot();
     const dt = engine.getDiagnostics().recommendedDt;
     const spacing = initialSnapshot.spacing;
     const angularFrequency =
-      (2 * baseConfig.waveSpeed * Math.sin((Math.PI * modeNumber) / baseConfig.siteCount)) /
+      (2 *
+        baseConfig.waveSpeed *
+        Math.sin((Math.PI * modeNumber) / baseConfig.siteCount)) /
       spacing;
     const period = (2 * Math.PI) / angularFrequency;
     const steps = Math.round(period / dt);
@@ -101,6 +105,7 @@ describe('Classical1DPeriodicEngine', () => {
       amplitude: 0.75,
       initialCenter: 0.5,
       gaussianWidth: 0.06,
+      modeNumbers: [1],
       initialPreset: 'gaussian-displacement',
     });
     const dt = engine.getDiagnostics().recommendedDt;
@@ -122,6 +127,9 @@ describe('Classical1DPeriodicEngine', () => {
     expect(snapshot.velocity[32]).toBeCloseTo(-0.002910375785966271, 12);
     expect(snapshot.velocity[48]).toBeCloseTo(-1.1423663379548268, 12);
     expect(snapshot.totalEnergy).toBeCloseTo(4.094008319486946, 12);
-    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(0.006108771248696588, 12);
+    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(
+      0.006108771248696588,
+      12,
+    );
   });
 });

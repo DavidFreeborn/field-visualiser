@@ -11,6 +11,7 @@ const baseConfig: Quantum1DFixedConfig = {
   gaussianWidth: 0.08,
   momentumWidth: 2,
   modeNumber: 4,
+  modeNumbers: [1],
   initialPreset: 'gaussian-wavepacket',
 };
 
@@ -26,7 +27,9 @@ describe('Quantum1DFixedEngine', () => {
     const snapshot = engine.getSnapshot();
     expect(engine.getDiagnostics().normError).toBeLessThan(1e-10);
     expect(snapshot.probabilityDensity[0]).toBeCloseTo(0, 12);
-    expect(snapshot.probabilityDensity[snapshot.probabilityDensity.length - 1]).toBeCloseTo(0, 12);
+    expect(
+      snapshot.probabilityDensity[snapshot.probabilityDensity.length - 1],
+    ).toBeCloseTo(0, 12);
   });
 
   it('evolves a selected sine mode by phase only while keeping probability density fixed', () => {
@@ -34,7 +37,7 @@ describe('Quantum1DFixedEngine', () => {
     const engine = new Quantum1DFixedEngine({
       ...baseConfig,
       initialPreset: 'selected-normal-mode',
-      modeNumber,
+      modeNumbers: [modeNumber],
     });
 
     const initialSnapshot = engine.getSnapshot('real-part');
@@ -42,7 +45,9 @@ describe('Quantum1DFixedEngine', () => {
     const spacing = initialSnapshot.spacing;
     const interiorCount = baseConfig.siteCount - 2;
     const angularFrequency =
-      (2 * baseConfig.waveSpeed * Math.sin((Math.PI * modeNumber) / (2 * (interiorCount + 1)))) /
+      (2 *
+        baseConfig.waveSpeed *
+        Math.sin((Math.PI * modeNumber) / (2 * (interiorCount + 1)))) /
       spacing;
 
     engine.step(dt);
@@ -52,7 +57,11 @@ describe('Quantum1DFixedEngine', () => {
     const cosPhase = Math.cos(expectedPhase);
     const sinPhase = Math.sin(expectedPhase);
 
-    for (let index = 0; index < initialSnapshot.amplitudeReal.length; index += 1) {
+    for (
+      let index = 0;
+      index < initialSnapshot.amplitudeReal.length;
+      index += 1
+    ) {
       const expectedReal =
         initialSnapshot.amplitudeReal[index] * cosPhase -
         initialSnapshot.amplitudeImaginary[index] * sinPhase;
@@ -61,7 +70,10 @@ describe('Quantum1DFixedEngine', () => {
         initialSnapshot.amplitudeImaginary[index] * cosPhase;
 
       expect(finalSnapshot.amplitudeReal[index]).toBeCloseTo(expectedReal, 10);
-      expect(finalSnapshot.amplitudeImaginary[index]).toBeCloseTo(expectedImaginary, 10);
+      expect(finalSnapshot.amplitudeImaginary[index]).toBeCloseTo(
+        expectedImaginary,
+        10,
+      );
       expect(finalSnapshot.probabilityDensity[index]).toBeCloseTo(
         initialSnapshot.probabilityDensity[index],
         10,
@@ -81,11 +93,23 @@ describe('Quantum1DFixedEngine', () => {
     const diagnostics = engine.getDiagnostics();
 
     expect(snapshot.time).toBeCloseTo(0.02045461736687728, 12);
-    expect(snapshot.probabilityDensity[1]).toBeCloseTo(2.629490886900237e-9, 12);
-    expect(snapshot.probabilityDensity[32]).toBeCloseTo(0.0000063527300083002975, 12);
-    expect(snapshot.probabilityDensity[64]).toBeCloseTo(0.05289070341576378, 12);
+    expect(snapshot.probabilityDensity[1]).toBeCloseTo(
+      2.629490886900237e-9,
+      12,
+    );
+    expect(snapshot.probabilityDensity[32]).toBeCloseTo(
+      0.0000063527300083002975,
+      12,
+    );
+    expect(snapshot.probabilityDensity[64]).toBeCloseTo(
+      0.05289070341576378,
+      12,
+    );
     expect(snapshot.amplitudeReal[32]).toBeCloseTo(0.0017328455489409812, 12);
-    expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(0.001830294050642062, 12);
+    expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(
+      0.001830294050642062,
+      12,
+    );
     expect(snapshot.totalNorm).toBeCloseTo(1, 12);
     expect(diagnostics.normError).toBeLessThan(1e-12);
   });

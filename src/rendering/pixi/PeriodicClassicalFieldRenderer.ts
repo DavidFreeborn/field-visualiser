@@ -28,12 +28,8 @@ import type {
   Quantum1DFixedQuantity,
   Quantum1DFixedSnapshot,
 } from '../../physics/quantum/quantum1dFixed';
-import type {
-  Quantum2DPeriodicQuantity,
-} from '../../physics/quantum/quantum2dPeriodic';
-import type {
-  Quantum2DFixedQuantity,
-} from '../../physics/quantum/quantum2dFixed';
+import type { Quantum2DPeriodicQuantity } from '../../physics/quantum/quantum2dPeriodic';
+import type { Quantum2DFixedQuantity } from '../../physics/quantum/quantum2dFixed';
 import type { Quantum2DDisplaySnapshot } from '../../physics/quantum/quantum2dDisplay';
 import {
   mapDensityToSequentialNumber,
@@ -192,7 +188,9 @@ export class PeriodicClassicalFieldRenderer {
   private retainedScaleMax = 0;
 
   private readonly resolution =
-    typeof window === 'undefined' ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+    typeof window === 'undefined'
+      ? 1
+      : Math.min(window.devicePixelRatio || 1, 2);
 
   public constructor(host: HTMLElement) {
     this.host = host;
@@ -268,9 +266,11 @@ export class PeriodicClassicalFieldRenderer {
     this.setRingMeshVisible(false);
 
     const isQuantum =
-      snapshot.kind === 'quantum-1d-periodic' || snapshot.kind === 'quantum-1d-fixed';
+      snapshot.kind === 'quantum-1d-periodic' ||
+      snapshot.kind === 'quantum-1d-fixed';
     const phaseView = options.quantity === 'phase-magnitude' && isQuantum;
-    const combinedView = options.quantity === 'real-imaginary-parts' && isQuantum;
+    const combinedView =
+      options.quantity === 'real-imaginary-parts' && isQuantum;
     const periodic = snapshot.boundaryCondition === 'periodic';
     // The circle is the primary representation of periodic topology; the
     // unwrapped plot must be requested explicitly.
@@ -280,12 +280,29 @@ export class PeriodicClassicalFieldRenderer {
       if (combinedView) {
         // Re/Im traces are radial displacements around the fixed base circle,
         // for both circle geometries.
-        return this.renderCombinedRing(snapshot as Quantum1DSnapshot, width, height, options);
+        return this.renderCombinedRing(
+          snapshot as Quantum1DSnapshot,
+          width,
+          height,
+          options,
+        );
       }
       if (options.circleGeometryMode === 'fixed') {
-        return this.renderFixedRing(snapshot, width, height, options, phaseView);
+        return this.renderFixedRing(
+          snapshot,
+          width,
+          height,
+          options,
+          phaseView,
+        );
       }
-      return this.renderDeformedRing(snapshot, width, height, options, phaseView);
+      return this.renderDeformedRing(
+        snapshot,
+        width,
+        height,
+        options,
+        phaseView,
+      );
     }
 
     if (combinedView) {
@@ -298,7 +315,14 @@ export class PeriodicClassicalFieldRenderer {
       );
     }
 
-    return this.renderLinePlot(snapshot, width, height, options, phaseView, periodic);
+    return this.renderLinePlot(
+      snapshot,
+      width,
+      height,
+      options,
+      phaseView,
+      periodic,
+    );
   }
 
   public destroy(): void {
@@ -315,6 +339,17 @@ export class PeriodicClassicalFieldRenderer {
   /** Number of retained drawing instructions in the guide layer (test hook). */
   public getGuideInstructionCount(): number {
     return this.guides.context.instructions.length;
+  }
+
+  /**
+   * Number of retained FILL instructions in the envelope layer (test hook).
+   * Ring envelopes must be stroked, never filled: filling the closed
+   * ring-band polygon triangulates pathologically at high bin counts.
+   */
+  public getEnvelopeFillInstructionCount(): number {
+    return this.envelope.context.instructions.filter(
+      (instruction) => instruction.action === 'fill',
+    ).length;
   }
 
   /** Total retained instructions across dynamic layers (test hook). */
@@ -372,7 +407,10 @@ export class PeriodicClassicalFieldRenderer {
   // -------------------------------------------------------------------------
 
   private renderLinePlot(
-    snapshot: Exclude<RendererSnapshot, Classical2DSnapshot | Quantum2DDisplaySnapshot>,
+    snapshot: Exclude<
+      RendererSnapshot,
+      Classical2DSnapshot | Quantum2DDisplaySnapshot
+    >,
     width: number,
     height: number,
     options: PeriodicClassicalFieldRendererOptions,
@@ -414,19 +452,26 @@ export class PeriodicClassicalFieldRenderer {
       : PLOT_MARGIN_Y + innerHeight;
     const amplitudePx = signed ? innerHeight * 0.46 : innerHeight * 0.92;
 
-    this.drawGuides(`plot:${width}:${height}:${signed ? 'mid' : 'base'}:${periodic ? 'p' : 'f'}`, (guides) => {
-      guides
-        .rect(PLOT_MARGIN_X, PLOT_MARGIN_Y, innerWidth, innerHeight)
-        .stroke({ width: 1, color: 0xc9c2b8, alpha: 0.7 });
-      guides
-        .moveTo(PLOT_MARGIN_X, baseline)
-        .lineTo(PLOT_MARGIN_X + innerWidth, baseline)
-        .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.6 });
+    this.drawGuides(
+      `plot:${width}:${height}:${signed ? 'mid' : 'base'}:${periodic ? 'p' : 'f'}`,
+      (guides) => {
+        guides
+          .rect(PLOT_MARGIN_X, PLOT_MARGIN_Y, innerWidth, innerHeight)
+          .stroke({ width: 1, color: 0xc9c2b8, alpha: 0.7 });
+        guides
+          .moveTo(PLOT_MARGIN_X, baseline)
+          .lineTo(PLOT_MARGIN_X + innerWidth, baseline)
+          .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.6 });
 
-      if (periodic) {
-        drawWraparoundBadge(guides, width - PLOT_MARGIN_X - 14, PLOT_MARGIN_Y + 12);
-      }
-    });
+        if (periodic) {
+          drawWraparoundBadge(
+            guides,
+            width - PLOT_MARGIN_X - 14,
+            PLOT_MARGIN_Y + 12,
+          );
+        }
+      },
+    );
 
     const xAt = (binIndex: number): number =>
       PLOT_MARGIN_X + (innerWidth * binIndex) / Math.max(1, lod.count - 1);
@@ -468,7 +513,11 @@ export class PeriodicClassicalFieldRenderer {
       this.waveform.stroke({ width: 1.2, color: 0x8f1f1f, alpha: 0.9 });
     }
 
-    if (options.showLattice && values.length <= MAX_1D_SITE_DOTS && !lod.binned) {
+    if (
+      options.showLattice &&
+      values.length <= MAX_1D_SITE_DOTS &&
+      !lod.binned
+    ) {
       const siteRadius = get1DSiteRadius(values.length);
       for (let index = 0; index < values.length; index += 1) {
         const color = signed
@@ -510,29 +559,42 @@ export class PeriodicClassicalFieldRenderer {
     periodic: boolean,
   ): RenderFrameInfo {
     const realLod = this.realLod.aggregate(snapshot.amplitudeReal, budget);
-    const imagLod = this.imaginaryLod.aggregate(snapshot.amplitudeImaginary, budget);
+    const imagLod = this.imaginaryLod.aggregate(
+      snapshot.amplitudeImaginary,
+      budget,
+    );
     const count = Math.min(realLod.count, imagLod.count);
 
     let frameMax = 0;
     for (let bin = 0; bin < count; bin += 1) {
-      frameMax = Math.max(frameMax, Math.hypot(realLod.mean[bin], imagLod.mean[bin]));
+      frameMax = Math.max(
+        frameMax,
+        Math.hypot(realLod.mean[bin], imagLod.mean[bin]),
+      );
     }
     const info = this.resolveScale(snapshot, options, frameMax, false, true);
 
     const stripTop = PLOT_MARGIN_Y + innerHeight - PHASE_STRIP_HEIGHT;
     const curveHeight = innerHeight - PHASE_STRIP_HEIGHT - 8;
 
-    this.drawGuides(`phase:${width}:${height}:${periodic ? 'p' : 'f'}`, (guides) => {
-      guides
-        .rect(PLOT_MARGIN_X, PLOT_MARGIN_Y, innerWidth, innerHeight)
-        .stroke({ width: 1, color: 0xc9c2b8, alpha: 0.7 });
-      guides
-        .rect(PLOT_MARGIN_X, stripTop, innerWidth, PHASE_STRIP_HEIGHT)
-        .stroke({ width: 1, color: 0xc9c2b8, alpha: 0.7 });
-      if (periodic) {
-        drawWraparoundBadge(guides, width - PLOT_MARGIN_X - 14, PLOT_MARGIN_Y + 12);
-      }
-    });
+    this.drawGuides(
+      `phase:${width}:${height}:${periodic ? 'p' : 'f'}`,
+      (guides) => {
+        guides
+          .rect(PLOT_MARGIN_X, PLOT_MARGIN_Y, innerWidth, innerHeight)
+          .stroke({ width: 1, color: 0xc9c2b8, alpha: 0.7 });
+        guides
+          .rect(PLOT_MARGIN_X, stripTop, innerWidth, PHASE_STRIP_HEIGHT)
+          .stroke({ width: 1, color: 0xc9c2b8, alpha: 0.7 });
+        if (periodic) {
+          drawWraparoundBadge(
+            guides,
+            width - PLOT_MARGIN_X - 14,
+            PLOT_MARGIN_Y + 12,
+          );
+        }
+      },
+    );
 
     // Phase heat strip: one texel per bin, hue = phase, fade = magnitude.
     this.ensureStripTexture(count);
@@ -545,7 +607,11 @@ export class PeriodicClassicalFieldRenderer {
         mapPhaseMagnitudeToNumber(phase, magnitude, info.scaleMax),
       );
     }
-    if (this.stripSource !== null && this.stripSprite !== null && this.stripTexture !== null) {
+    if (
+      this.stripSource !== null &&
+      this.stripSprite !== null &&
+      this.stripTexture !== null
+    ) {
       this.stripSource.update();
       this.stripSprite.texture = this.stripTexture;
       this.stripSprite.visible = true;
@@ -561,9 +627,15 @@ export class PeriodicClassicalFieldRenderer {
     const yAt = (magnitude: number): number =>
       stripTop - 8 - (magnitude / info.scaleMax) * curveHeight * 0.92;
 
-    this.waveform.moveTo(xAt(0), yAt(Math.hypot(realLod.mean[0], imagLod.mean[0])));
+    this.waveform.moveTo(
+      xAt(0),
+      yAt(Math.hypot(realLod.mean[0], imagLod.mean[0])),
+    );
     for (let bin = 1; bin < count; bin += 1) {
-      this.waveform.lineTo(xAt(bin), yAt(Math.hypot(realLod.mean[bin], imagLod.mean[bin])));
+      this.waveform.lineTo(
+        xAt(bin),
+        yAt(Math.hypot(realLod.mean[bin], imagLod.mean[bin])),
+      );
     }
     this.waveform.stroke({ width: 1.4, color: 0x18222c, alpha: 0.9 });
 
@@ -649,7 +721,19 @@ export class PeriodicClassicalFieldRenderer {
     minAt: (bin: number) => { x: number; y: number },
     maxAt: (bin: number) => { x: number; y: number },
     color: number,
+    ring = false,
   ): void {
+    if (ring) {
+      // On ring geometry the min/max envelope is drawn as two closed stroked
+      // outlines. Filling the closed ring-band polygon triangulates
+      // pathologically in Pixi at high bin counts (~1.5 s per frame at 2048
+      // sites), while strokes of the same vertex count render in
+      // microseconds.
+      this.strokeEnvelopeLoop(count, maxAt, color);
+      this.strokeEnvelopeLoop(count, minAt, color);
+      return;
+    }
+
     const first = maxAt(0);
     this.envelope.moveTo(first.x, first.y);
     for (let bin = 1; bin < count; bin += 1) {
@@ -661,6 +745,21 @@ export class PeriodicClassicalFieldRenderer {
       this.envelope.lineTo(point.x, point.y);
     }
     this.envelope.closePath().fill({ color, alpha: 0.15 });
+  }
+
+  private strokeEnvelopeLoop(
+    count: number,
+    pointAt: (bin: number) => { x: number; y: number },
+    color: number,
+    alpha = 0.4,
+  ): void {
+    const first = pointAt(0);
+    this.envelope.moveTo(first.x, first.y);
+    for (let bin = 1; bin < count; bin += 1) {
+      const point = pointAt(bin);
+      this.envelope.lineTo(point.x, point.y);
+    }
+    this.envelope.closePath().stroke({ width: 1, color, alpha });
   }
 
   private renderCombinedRing(
@@ -682,23 +781,32 @@ export class PeriodicClassicalFieldRenderer {
     const minDimension = Math.min(width, height);
     const baseRadius = Math.max(32, minDimension * RING_BASE_RADIUS_FRACTION);
     const radialScale = minDimension * RING_RADIAL_SCALE_FRACTION;
-    const budget = computePixelBudget(2 * Math.PI * baseRadius, this.resolution);
+    const budget = computePixelBudget(
+      2 * Math.PI * baseRadius,
+      this.resolution,
+    );
 
     // The undeformed domain circle is the shared zero baseline: visible but
     // visually subordinate to the traces.
-    this.drawGuides(`circle-combined:${width}:${height}:${baseRadius.toFixed(1)}`, (guides) => {
-      guides
-        .circle(centerX, centerY, baseRadius)
-        .stroke({ width: 1.2, color: 0x8b939e, alpha: 0.6 });
-    });
+    this.drawGuides(
+      `circle-combined:${width}:${height}:${baseRadius.toFixed(1)}`,
+      (guides) => {
+        guides
+          .circle(centerX, centerY, baseRadius)
+          .stroke({ width: 1.2, color: 0x8b939e, alpha: 0.6 });
+      },
+    );
 
     const realLod = this.realLod.aggregate(snapshot.amplitudeReal, budget);
-    const imagLod = this.imaginaryLod.aggregate(snapshot.amplitudeImaginary, budget);
+    const imagLod = this.imaginaryLod.aggregate(
+      snapshot.amplitudeImaginary,
+      budget,
+    );
     const count = Math.min(realLod.count, imagLod.count);
     const info = this.resolveCombinedScale(snapshot, options);
 
     const pointFor = (bin: number, value: number): { x: number; y: number } => {
-      const angle = (-Math.PI / 2) + (2 * Math.PI * bin) / count;
+      const angle = -Math.PI / 2 + (2 * Math.PI * bin) / count;
       const radius = baseRadius + (value / info.scaleMax) * radialScale;
       return {
         x: centerX + Math.cos(angle) * radius,
@@ -712,6 +820,7 @@ export class PeriodicClassicalFieldRenderer {
         (bin) => pointFor(bin, realLod.min[bin]),
         (bin) => pointFor(bin, realLod.max[bin]),
         REAL_TRACE_COLOR,
+        true,
       );
     }
     if (imagLod.binned) {
@@ -720,6 +829,7 @@ export class PeriodicClassicalFieldRenderer {
         (bin) => pointFor(bin, imagLod.min[bin]),
         (bin) => pointFor(bin, imagLod.max[bin]),
         IMAGINARY_TRACE_COLOR,
+        true,
       );
     }
 
@@ -779,17 +889,27 @@ export class PeriodicClassicalFieldRenderer {
           .lineTo(PLOT_MARGIN_X + innerWidth, baseline)
           .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.6 });
         if (periodic) {
-          drawWraparoundBadge(guides, width - PLOT_MARGIN_X - 14, PLOT_MARGIN_Y + 12);
+          drawWraparoundBadge(
+            guides,
+            width - PLOT_MARGIN_X - 14,
+            PLOT_MARGIN_Y + 12,
+          );
         }
       },
     );
 
     const realLod = this.realLod.aggregate(snapshot.amplitudeReal, budget);
-    const imagLod = this.imaginaryLod.aggregate(snapshot.amplitudeImaginary, budget);
+    const imagLod = this.imaginaryLod.aggregate(
+      snapshot.amplitudeImaginary,
+      budget,
+    );
     const count = Math.min(realLod.count, imagLod.count);
     const info = this.resolveCombinedScale(snapshot, options);
 
-    const pointFor = (bin: number, value: number): { x: number; y: number } => ({
+    const pointFor = (
+      bin: number,
+      value: number,
+    ): { x: number; y: number } => ({
       x: PLOT_MARGIN_X + (innerWidth * bin) / Math.max(1, count - 1),
       y: baseline - (value / info.scaleMax) * amplitudePx,
     });
@@ -838,7 +958,10 @@ export class PeriodicClassicalFieldRenderer {
   // -------------------------------------------------------------------------
 
   private renderDeformedRing(
-    snapshot: Exclude<RendererSnapshot, Classical2DSnapshot | Quantum2DDisplaySnapshot>,
+    snapshot: Exclude<
+      RendererSnapshot,
+      Classical2DSnapshot | Quantum2DDisplaySnapshot
+    >,
     width: number,
     height: number,
     options: PeriodicClassicalFieldRendererOptions,
@@ -859,26 +982,39 @@ export class PeriodicClassicalFieldRenderer {
     const tangentialScale = minDimension * RING_TANGENTIAL_SCALE_FRACTION;
 
     // Ring pixel budget from the on-screen circumference.
-    const budget = computePixelBudget(2 * Math.PI * baseRadius, this.resolution);
+    const budget = computePixelBudget(
+      2 * Math.PI * baseRadius,
+      this.resolution,
+    );
 
     const quantity = phaseView ? 'magnitude' : options.quantity;
     const values = getDisplayedValues(snapshot, quantity);
     const signed = !phaseView && !usesSequentialMap(quantity);
     const frameMax = getMaxMagnitude(values);
-    const info = this.resolveScale(snapshot, options, frameMax, signed, phaseView);
+    const info = this.resolveScale(
+      snapshot,
+      options,
+      frameMax,
+      signed,
+      phaseView,
+    );
     const lod = this.valueLod.aggregate(values, budget);
     const useLongitudinal = options.circleLayout === 'longitudinal' && signed;
 
-    this.drawGuides(`circle:${width}:${height}:${baseRadius.toFixed(1)}`, (guides) => {
-      guides
-        .circle(centerX, centerY, baseRadius)
-        .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.45 });
-    });
+    this.drawGuides(
+      `circle:${width}:${height}:${baseRadius.toFixed(1)}`,
+      (guides) => {
+        guides
+          .circle(centerX, centerY, baseRadius)
+          .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.45 });
+      },
+    );
 
     const pointAt = (bin: number, value: number): { x: number; y: number } => {
-      const angle = (-Math.PI / 2) + (2 * Math.PI * bin) / lod.count;
+      const angle = -Math.PI / 2 + (2 * Math.PI * bin) / lod.count;
       if (useLongitudinal) {
-        const angleOffset = ((value / info.scaleMax) * tangentialScale) / baseRadius;
+        const angleOffset =
+          ((value / info.scaleMax) * tangentialScale) / baseRadius;
         return {
           x: centerX + Math.cos(angle + angleOffset) * baseRadius,
           y: centerY + Math.sin(angle + angleOffset) * baseRadius,
@@ -894,20 +1030,23 @@ export class PeriodicClassicalFieldRenderer {
     };
 
     if (lod.binned && !useLongitudinal) {
-      // Envelope band between per-bin min and max radial offsets.
-      const first = pointAt(0, lod.max[0]);
-      this.envelope.moveTo(first.x, first.y);
-      for (let bin = 1; bin < lod.count; bin += 1) {
-        const point = pointAt(bin, lod.max[bin]);
-        this.envelope.lineTo(point.x, point.y);
-      }
-      for (let bin = lod.count - 1; bin >= 0; bin -= 1) {
-        const point = pointAt(bin, lod.min[bin]);
-        this.envelope.lineTo(point.x, point.y);
-      }
-      this.envelope
-        .closePath()
-        .fill({ color: signed ? 0x53687d : 0xc14f37, alpha: signed ? 0.3 : 0.38 });
+      // Min/max envelope as two closed stroked outlines. Filling the closed
+      // ring-band polygon triangulates pathologically in Pixi at high bin
+      // counts (~1.5 s per frame at 2048 sites); strokes preserve the same
+      // envelope information at negligible cost.
+      const bandColor = signed ? 0x53687d : 0xc14f37;
+      this.strokeEnvelopeLoop(
+        lod.count,
+        (bin) => pointAt(bin, lod.max[bin]),
+        bandColor,
+        0.45,
+      );
+      this.strokeEnvelopeLoop(
+        lod.count,
+        (bin) => pointAt(bin, lod.min[bin]),
+        bandColor,
+        0.45,
+      );
     }
 
     const start = pointAt(0, lod.mean[0]);
@@ -916,9 +1055,15 @@ export class PeriodicClassicalFieldRenderer {
       const point = pointAt(bin, lod.mean[bin]);
       this.waveform.lineTo(point.x, point.y);
     }
-    this.waveform.closePath().stroke({ width: 1.4, color: 0x18222c, alpha: 0.95 });
+    this.waveform
+      .closePath()
+      .stroke({ width: 1.4, color: 0x18222c, alpha: 0.95 });
 
-    if (options.showLattice && values.length <= MAX_1D_SITE_DOTS && !lod.binned) {
+    if (
+      options.showLattice &&
+      values.length <= MAX_1D_SITE_DOTS &&
+      !lod.binned
+    ) {
       const siteRadius = get1DSiteRadius(values.length);
       for (let index = 0; index < values.length; index += 1) {
         const point = pointAt(index, values[index]);
@@ -926,11 +1071,17 @@ export class PeriodicClassicalFieldRenderer {
           ? mapSignedValueToDivergingNumber(values[index], info.scaleMax)
           : mapDensityToSequentialNumber(values[index], info.scaleMax);
         // Dots sit beneath the trace so the line stays continuous.
-        this.bonds.circle(point.x, point.y, siteRadius).fill({ color, alpha: 0.95 });
+        this.bonds
+          .circle(point.x, point.y, siteRadius)
+          .fill({ color, alpha: 0.95 });
       }
     }
 
-    if (options.showSprings && values.length <= MAX_1D_SITE_DOTS && !lod.binned) {
+    if (
+      options.showSprings &&
+      values.length <= MAX_1D_SITE_DOTS &&
+      !lod.binned
+    ) {
       const bondWidth = get1DBondWidth(values.length);
       for (let index = 0; index < values.length; index += 1) {
         const point = pointAt(index, values[index]);
@@ -947,7 +1098,10 @@ export class PeriodicClassicalFieldRenderer {
   }
 
   private renderFixedRing(
-    snapshot: Exclude<RendererSnapshot, Classical2DSnapshot | Quantum2DDisplaySnapshot>,
+    snapshot: Exclude<
+      RendererSnapshot,
+      Classical2DSnapshot | Quantum2DDisplaySnapshot
+    >,
     width: number,
     height: number,
     options: PeriodicClassicalFieldRendererOptions,
@@ -965,29 +1119,43 @@ export class PeriodicClassicalFieldRenderer {
     const minDimension = Math.min(width, height);
     const baseRadius = Math.max(32, minDimension * FIXED_RING_RADIUS_FRACTION);
     const ringWidth = Math.max(10, Math.min(28, minDimension * 0.05));
-    const budget = computePixelBudget(2 * Math.PI * baseRadius, this.resolution);
+    const budget = computePixelBudget(
+      2 * Math.PI * baseRadius,
+      this.resolution,
+    );
 
-    this.drawGuides(`ring:${width}:${height}:${baseRadius.toFixed(1)}`, (guides) => {
-      guides
-        .circle(centerX, centerY, baseRadius - ringWidth * 0.75)
-        .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.3 });
-    });
+    this.drawGuides(
+      `ring:${width}:${height}:${baseRadius.toFixed(1)}`,
+      (guides) => {
+        guides
+          .circle(centerX, centerY, baseRadius - ringWidth * 0.75)
+          .stroke({ width: 1, color: 0x9ea6b0, alpha: 0.3 });
+      },
+    );
 
-    const signed =
-      !phaseView && !usesSequentialMap(options.quantity);
+    const signed = !phaseView && !usesSequentialMap(options.quantity);
 
     let info: RenderFrameInfo;
     let binCount: number;
 
     if (phaseView) {
       const quantumSnapshot = snapshot as Quantum1DSnapshot;
-      const realLod = this.realLod.aggregate(quantumSnapshot.amplitudeReal, budget);
-      const imagLod = this.imaginaryLod.aggregate(quantumSnapshot.amplitudeImaginary, budget);
+      const realLod = this.realLod.aggregate(
+        quantumSnapshot.amplitudeReal,
+        budget,
+      );
+      const imagLod = this.imaginaryLod.aggregate(
+        quantumSnapshot.amplitudeImaginary,
+        budget,
+      );
       binCount = Math.min(realLod.count, imagLod.count);
 
       let frameMax = 0;
       for (let bin = 0; bin < binCount; bin += 1) {
-        frameMax = Math.max(frameMax, Math.hypot(realLod.mean[bin], imagLod.mean[bin]));
+        frameMax = Math.max(
+          frameMax,
+          Math.hypot(realLod.mean[bin], imagLod.mean[bin]),
+        );
       }
       info = this.resolveScale(snapshot, options, frameMax, false, true);
 
@@ -1013,7 +1181,9 @@ export class PeriodicClassicalFieldRenderer {
         // Color by the extremum of the bin (largest |value|) so aggregated
         // narrow peaks stay visible on the ring.
         const extremum =
-          Math.abs(lod.max[bin]) >= Math.abs(lod.min[bin]) ? lod.max[bin] : lod.min[bin];
+          Math.abs(lod.max[bin]) >= Math.abs(lod.min[bin])
+            ? lod.max[bin]
+            : lod.min[bin];
         writeColorToPixelBuffer(
           this.ringPixels,
           bin * 4,
@@ -1035,7 +1205,7 @@ export class PeriodicClassicalFieldRenderer {
       if (values.length <= MAX_1D_SITE_DOTS) {
         const siteRadius = get1DSiteRadius(values.length);
         for (let index = 0; index < values.length; index += 1) {
-          const angle = (-Math.PI / 2) + (2 * Math.PI * index) / values.length;
+          const angle = -Math.PI / 2 + (2 * Math.PI * index) / values.length;
           const color = signed
             ? mapSignedValueToDivergingNumber(values[index], info.scaleMax)
             : mapDensityToSequentialNumber(values[index], info.scaleMax);
@@ -1065,16 +1235,25 @@ export class PeriodicClassicalFieldRenderer {
   ): RenderFrameInfo {
     const renderStart = performance.now();
     const auxValues =
-      snapshot.kind === 'quantum-2d-display' && snapshot.quantity === 'phase-magnitude'
+      snapshot.kind === 'quantum-2d-display' &&
+      snapshot.quantity === 'phase-magnitude'
         ? snapshot.displayValuesAux
         : undefined;
     const phaseView = auxValues !== undefined;
     const values = auxValues ?? getDisplayedValues(snapshot, options.quantity);
     const phases =
-      phaseView && snapshot.kind === 'quantum-2d-display' ? snapshot.displayValues : null;
+      phaseView && snapshot.kind === 'quantum-2d-display'
+        ? snapshot.displayValues
+        : null;
     const signed = !phaseView && !usesSequentialMap(options.quantity);
     const frameMax = getMaxMagnitude(values);
-    const info = this.resolveScale(snapshot, options, frameMax, signed, phaseView);
+    const info = this.resolveScale(
+      snapshot,
+      options,
+      frameMax,
+      signed,
+      phaseView,
+    );
 
     const cols = snapshot.width;
     const rows = snapshot.height;
@@ -1095,7 +1274,13 @@ export class PeriodicClassicalFieldRenderer {
     this.setRingMeshVisible(false);
     this.setStripVisible(false);
 
-    const displayGrid = selectHeatmapGrid(cols, rows, side, side, this.adaptiveQuality);
+    const displayGrid = selectHeatmapGrid(
+      cols,
+      rows,
+      side,
+      side,
+      this.adaptiveQuality,
+    );
     this.ensureHeatmapTexture(displayGrid.width, displayGrid.height);
     populateHeatmapPixels({
       values,
@@ -1117,7 +1302,9 @@ export class PeriodicClassicalFieldRenderer {
     }
 
     this.heatmapSource.scaleMode =
-      displayGrid.width < cols || displayGrid.height < rows ? 'linear' : 'nearest';
+      displayGrid.width < cols || displayGrid.height < rows
+        ? 'linear'
+        : 'nearest';
     this.heatmapSource.update();
     this.heatmap.texture = this.heatmapTexture;
     this.heatmap.visible = true;
@@ -1154,7 +1341,11 @@ export class PeriodicClassicalFieldRenderer {
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < cols; x += 1) {
         this.masses
-          .circle(offsetX + (x + 0.5) * cellWidth, offsetY + (y + 0.5) * cellHeight, radius)
+          .circle(
+            offsetX + (x + 0.5) * cellWidth,
+            offsetY + (y + 0.5) * cellHeight,
+            radius,
+          )
           .fill({ color: 0x17202a, alpha: 0.16 });
       }
     }
@@ -1304,7 +1495,11 @@ export class PeriodicClassicalFieldRenderer {
         indices[segment * 6 + 5] = base + 2;
       }
 
-      const geometry = new MeshGeometry({ positions: this.ringPositions, uvs, indices });
+      const geometry = new MeshGeometry({
+        positions: this.ringPositions,
+        uvs,
+        indices,
+      });
       // Force the batched pipeline: the non-batched mesh path does not
       // survive texture replacement (stale GPU bind groups -> crash).
       geometry.batchMode = 'batch';
@@ -1324,7 +1519,7 @@ export class PeriodicClassicalFieldRenderer {
       const positions = this.ringPositions;
 
       for (let segment = 0; segment <= segments; segment += 1) {
-        const angle = (-Math.PI / 2) + (2 * Math.PI * segment) / segments;
+        const angle = -Math.PI / 2 + (2 * Math.PI * segment) / segments;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
         const outer = radius + ringWidth / 2;
@@ -1338,7 +1533,10 @@ export class PeriodicClassicalFieldRenderer {
       this.ringMesh.geometry.getBuffer('aPosition').update();
     }
 
-    if (this.ringTexture !== null && this.ringMesh.texture !== this.ringTexture) {
+    if (
+      this.ringTexture !== null &&
+      this.ringMesh.texture !== this.ringTexture
+    ) {
       this.ringMesh.texture = this.ringTexture;
     }
 
@@ -1380,7 +1578,10 @@ export class PeriodicClassicalFieldRenderer {
 
     if (this.stripSprite === null) {
       this.stripSprite = new Sprite();
-      this.root.addChildAt(this.stripSprite, this.root.getChildIndex(this.waveform));
+      this.root.addChildAt(
+        this.stripSprite,
+        this.root.getChildIndex(this.waveform),
+      );
     }
   }
 
@@ -1419,7 +1620,10 @@ export class PeriodicClassicalFieldRenderer {
     }
 
     if (this.smoothedRenderTimeMs < FRAME_TIME_LOWER_BOUND_MS) {
-      this.adaptiveQuality = Math.min(1, this.adaptiveQuality + ADAPTIVE_QUALITY_STEP * 0.5);
+      this.adaptiveQuality = Math.min(
+        1,
+        this.adaptiveQuality + ADAPTIVE_QUALITY_STEP * 0.5,
+      );
     }
   }
 }
@@ -1443,7 +1647,10 @@ function drawWraparoundBadge(guides: Graphics, x: number, y: number): void {
 }
 
 function getSiteCountKey(snapshot: RendererSnapshot): number {
-  if (snapshot.kind === 'classical-2d' || snapshot.kind === 'quantum-2d-display') {
+  if (
+    snapshot.kind === 'classical-2d' ||
+    snapshot.kind === 'quantum-2d-display'
+  ) {
     return snapshot.width * snapshot.height;
   }
   return snapshot.siteCount;
@@ -1470,7 +1677,10 @@ function getDisplayedValues(
     return snapshot.displayValues;
   }
 
-  if (snapshot.kind === 'classical-1d-periodic' || snapshot.kind === 'classical-1d-fixed') {
+  if (
+    snapshot.kind === 'classical-1d-periodic' ||
+    snapshot.kind === 'classical-1d-fixed'
+  ) {
     switch (quantity) {
       case 'displacement':
         return snapshot.displacement;
@@ -1548,7 +1758,10 @@ function selectHeatmapGrid(
   innerHeight: number,
   adaptiveQuality: number,
 ): { width: number; height: number } {
-  const cappedWidth = Math.min(cols, Math.max(MIN_HEATMAP_AXIS, Math.round(innerWidth * adaptiveQuality)));
+  const cappedWidth = Math.min(
+    cols,
+    Math.max(MIN_HEATMAP_AXIS, Math.round(innerWidth * adaptiveQuality)),
+  );
   const cappedHeight = Math.min(
     rows,
     Math.max(MIN_HEATMAP_AXIS, Math.round(innerHeight * adaptiveQuality)),
@@ -1562,8 +1775,14 @@ function selectHeatmapGrid(
 
   if (width * height > maxPixels) {
     const scale = Math.sqrt(maxPixels / (width * height));
-    width = Math.max(MIN_HEATMAP_AXIS, Math.min(cols, Math.floor(width * scale)));
-    height = Math.max(MIN_HEATMAP_AXIS, Math.min(rows, Math.floor(height * scale)));
+    width = Math.max(
+      MIN_HEATMAP_AXIS,
+      Math.min(cols, Math.floor(width * scale)),
+    );
+    height = Math.max(
+      MIN_HEATMAP_AXIS,
+      Math.min(rows, Math.floor(height * scale)),
+    );
   }
 
   return {
@@ -1627,9 +1846,15 @@ function populateHeatmapPixels({
   }
 
   for (let y = 0; y < rows; y += 1) {
-    const targetY = Math.min(targetRows - 1, Math.floor((y * targetRows) / rows));
+    const targetY = Math.min(
+      targetRows - 1,
+      Math.floor((y * targetRows) / rows),
+    );
     for (let x = 0; x < cols; x += 1) {
-      const targetX = Math.min(targetCols - 1, Math.floor((x * targetCols) / cols));
+      const targetX = Math.min(
+        targetCols - 1,
+        Math.floor((x * targetCols) / cols),
+      );
       const targetIndex = targetY * targetCols + targetX;
       const sourceIndex = y * cols + x;
       downsampleAccum[targetIndex] += values[sourceIndex];
@@ -1645,7 +1870,11 @@ function populateHeatmapPixels({
     const averagedValue = count === 0 ? 0 : downsampleAccum[index] / count;
     const averagedPhase =
       phases !== null && count > 0 ? downsampleAuxAccum[index] / count : 0;
-    writeColorToPixelBuffer(heatmapPixels, index * 4, colorFor(averagedValue, averagedPhase));
+    writeColorToPixelBuffer(
+      heatmapPixels,
+      index * 4,
+      colorFor(averagedValue, averagedPhase),
+    );
   }
 }
 

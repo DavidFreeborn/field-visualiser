@@ -9,14 +9,20 @@ const workerMessages: unknown[] = [];
 const terminateSpy = vi.fn();
 
 class MockWorker {
-  public onmessage: ((event: MessageEvent<Quantum2DWorkerResponse>) => void) | null = null;
+  public onmessage:
+    | ((event: MessageEvent<Quantum2DWorkerResponse>) => void)
+    | null = null;
 
   public onerror: ((event: Event) => void) | null = null;
 
   public postMessage(message: unknown): void {
     workerMessages.push(message);
 
-    const request = message as { type?: string; quantity?: string; generation?: number };
+    const request = message as {
+      type?: string;
+      quantity?: string;
+      generation?: number;
+    };
     if (
       request.type === 'configure' ||
       request.type === 'set-quantity' ||
@@ -33,8 +39,10 @@ class MockWorker {
               time: 0,
               systemLabel: '2D torus',
               boundaryCondition: 'periodic',
-              modeLabel: 'free-field one-particle',
-              quantity: (request.quantity ?? 'probability-density') as 'probability-density' | 'real-part',
+              modeLabel: 'square-root lattice quantum model',
+              quantity: (request.quantity ?? 'probability-density') as
+                | 'probability-density'
+                | 'real-part',
               width: 4,
               height: 4,
               domainLength: 1,
@@ -136,7 +144,9 @@ describe('useQuantum2DPrototype', () => {
           <div data-testid="size">{controller.config.size}</div>
           <button
             type="button"
-            onClick={() => controller.setConfig({ ...controller.config, size: 48 })}
+            onClick={() =>
+              controller.setConfig({ ...controller.config, size: 48 })
+            }
           >
             resize
           </button>
@@ -147,7 +157,11 @@ describe('useQuantum2DPrototype', () => {
     render(<Probe />);
 
     await waitFor(() => {
-      expect(workerMessages.some((m) => (m as { type?: string }).type === 'configure')).toBe(true);
+      expect(
+        workerMessages.some(
+          (m) => (m as { type?: string }).type === 'configure',
+        ),
+      ).toBe(true);
     });
     const terminationsAfterMount = terminateSpy.mock.calls.length;
     const configuresBefore = workerMessages.filter(
@@ -166,5 +180,105 @@ describe('useQuantum2DPrototype', () => {
     // No worker teardown happened for the config change.
     expect(terminateSpy.mock.calls.length).toBe(terminationsAfterMount);
     expect(screen.getByTestId('size')).toHaveTextContent('48');
+  });
+
+  it('reset publishes a fresh time-zero frame immediately, without waiting for the worker', async () => {
+    // A worker that never replies: any frame that appears must come from the
+    // hook's own local time-zero publication.
+    class SilentWorker {
+      public onmessage:
+        | ((event: MessageEvent<Quantum2DWorkerResponse>) => void)
+        | null = null;
+      public onerror: ((event: Event) => void) | null = null;
+      public postMessage(message: unknown): void {
+        workerMessages.push(message);
+      }
+      public terminate(): void {
+        terminateSpy();
+      }
+    }
+    globalThis.Worker = SilentWorker as unknown as typeof Worker;
+
+    const user = userEvent.setup();
+    let latestChannelTime: number | null = null;
+
+    function Probe(): React.JSX.Element {
+      const controller = useQuantum2DPrototype('torus-periodic');
+
+      useEffect(() => {
+        controller.setPlaying(false);
+      }, [controller]);
+
+      return (
+        <div>
+          <div data-testid="displayTime">{controller.displayTime}</div>
+          <button
+            type="button"
+            onClick={() => {
+              controller.reset();
+              latestChannelTime =
+                controller.frameChannel.getLatest()?.time ?? null;
+            }}
+          >
+            reset
+          </button>
+        </div>
+      );
+    }
+
+    render(<Probe />);
+    await user.click(screen.getByRole('button', { name: 'reset' }));
+
+    // The frame channel already carries a genuine time-zero frame even though
+    // the worker has not answered.
+    expect(latestChannelTime).toBe(0);
+    expect(screen.getByTestId('displayTime')).toHaveTextContent('0');
+  });
+
+  it('ignores stale worker error responses from a superseded generation', async () => {
+    let workerInstance: MockWorker | null = null;
+    class CapturingWorker extends MockWorker {
+      public constructor() {
+        super();
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        workerInstance = this;
+      }
+    }
+    globalThis.Worker = CapturingWorker as unknown as typeof Worker;
+
+    const user = userEvent.setup();
+
+    function Probe(): React.JSX.Element {
+      const controller = useQuantum2DPrototype('torus-periodic');
+
+      useEffect(() => {
+        controller.setPlaying(false);
+      }, [controller]);
+
+      return (
+        <button type="button" onClick={() => controller.reset()}>
+          reset
+        </button>
+      );
+    }
+
+    render(<Probe />);
+    await waitFor(() => {
+      expect(
+        workerMessages.some(
+          (m) => (m as { type?: string }).type === 'configure',
+        ),
+      ).toBe(true);
+    });
+
+    // Bump the generation, then deliver an error stamped with a stale one.
+    await user.click(screen.getByRole('button', { name: 'reset' }));
+    const terminationsBefore = terminateSpy.mock.calls.length;
+    workerInstance!.onmessage?.({
+      data: { type: 'error', generation: 0, message: 'stale failure' },
+    } as MessageEvent<Quantum2DWorkerResponse>);
+
+    // The healthy worker was not torn down (no local-mode fallback).
+    expect(terminateSpy.mock.calls.length).toBe(terminationsBefore);
   });
 });

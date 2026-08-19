@@ -1,18 +1,29 @@
 # Field Visualiser
 
 Field Visualiser is a TypeScript web application for scientifically rigorous
-visualisation of discrete classical fields and free-field one-particle lattice
-models.
+visualisation of two explicitly documented finite lattice models:
+
+- the **classical nearest-neighbour semi-discrete wave equation**
+  (velocity-Verlet time integration, periodic or homogeneous Dirichlet
+  boundaries), and
+- the **square-root lattice quantum model**
+  `i dpsi/dt = c sqrt(-Delta_h) psi` (exact unitary modal evolution of a
+  lattice wavefunction; hbar = 1).
+
+Neither is an exact continuum solver, and the quantum model is not a full
+quantized scalar field theory. The exact equations, invariants, verification
+evidence, and interpretation limits are documented in
+[`PHYSICS_AUDIT.md`](./PHYSICS_AUDIT.md).
 
 ## Status
 
 The repository is being built in phases. The current implementation includes:
 
 - 1D periodic and fixed-end classical lattice systems
-- 1D periodic and fixed-end free-field one-particle systems
+- 1D periodic and fixed-end square-root lattice quantum systems
 - 2D square and torus classical lattice systems
-- 2D square and torus free-field one-particle systems
-- Pixi-based 1D and 2D rendering with diagnostics and regression coverage
+- 2D square and torus square-root lattice quantum systems
+- Pixi-based 1D and 2D rendering with regression coverage
 
 Performance and rendering architecture:
 
@@ -32,9 +43,9 @@ Performance and rendering architecture:
 - 1D rendering aggregates to the screen-space pixel budget (min/max envelope
   for signed traces, mean with max outline for densities), the fixed ring is
   a single texture-mapped mesh, and renderer resolution is capped at 2x DPR
-- Periodic 1D systems render as circles by default (the topology is the
-  point), with compact diagnostics in the ring centre; the unwrapped plot
-  remains available as an analysis view
+- Periodic 1D systems render as true circles by default (the topology is the
+  point) with an uncluttered centre; the unwrapped plot remains available as
+  an analysis view
 - 1D quantum systems offer a combined Re/Im view: two radial displacement
   traces (colorblind-safe blue solid / orange dashed) around the base circle,
   sharing one symmetric scale from max(|Re psi|, |Im psi|)
@@ -70,14 +81,19 @@ npm run bench   # vitest benchmarks: transforms, engines, renderer
 
 Version 1 targets:
 
-- classical lattice fields
+- classical nearest-neighbour lattice fields (semi-discrete wave equation)
 - oscillator-lattice pedagogical views
-- free-field one-particle probability-density visualisations
+- square-root lattice quantum model site-probability visualisations
 
-Version 1 does not attempt interacting quantum field theory.
+Version 1 does not attempt interacting quantum field theory, particle
+creation, a mass term, or a covariant theory of relativistic localization.
 
-Quantum mode is a pedagogical one-particle lattice visualisation. The default
-red heatmap shows probability density, not a literal classical particle blob.
+The quantum mode evolves a lattice wavefunction under `c sqrt(-Delta_h)` with
+its lattice dispersion (not the continuum `omega = c|k|`). The displayed
+`|psi_i|^2` is a lattice **site probability** (summing to one); a continuum
+probability density would require division by `h^d` under grid refinement.
+See `PHYSICS_AUDIT.md` for the full derivation, verification evidence, and
+interpretation limits.
 
 ## Release checklist
 
@@ -160,7 +176,7 @@ Current module boundaries:
 
 - `src/physics`: deterministic lattice engines, operators, invariants, and exact modal solvers
 - `src/rendering`: Pixi renderer and display-only color/geometry transforms
-- `src/app` and `src/components`: React shell, controls, presets, diagnostics, and explanatory UI
+- `src/app` and `src/components`: React shell, controls, presets, and explanatory UI
 
 ## Shareable scene state
 

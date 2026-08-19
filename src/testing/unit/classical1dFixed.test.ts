@@ -10,6 +10,7 @@ const baseConfig: Classical1DFixedConfig = {
   amplitude: 0.75,
   initialCenter: 0.5,
   gaussianWidth: 0.06,
+  modeNumbers: [1],
   initialPreset: 'gaussian-displacement',
 };
 
@@ -27,7 +28,10 @@ describe('Classical1DFixedEngine', () => {
 
     const snapshot = engine.getSnapshot();
     expect(snapshot.displacement[0]).toBeCloseTo(0, 12);
-    expect(snapshot.displacement[snapshot.displacement.length - 1]).toBeCloseTo(0, 12);
+    expect(snapshot.displacement[snapshot.displacement.length - 1]).toBeCloseTo(
+      0,
+      12,
+    );
     expect(snapshot.velocity[0]).toBeCloseTo(0, 12);
     expect(snapshot.velocity[snapshot.velocity.length - 1]).toBeCloseTo(0, 12);
   });
@@ -54,7 +58,8 @@ describe('Classical1DFixedEngine', () => {
   it('matches the analytical standing mode for fixed boundaries', () => {
     const engine = new Classical1DFixedEngine({
       ...baseConfig,
-      initialPreset: 'standing-mode-1',
+      initialPreset: 'standing-modes',
+      modeNumbers: [1],
       amplitude: 0.5,
     });
     const initialSnapshot = engine.getSnapshot();
@@ -62,7 +67,10 @@ describe('Classical1DFixedEngine', () => {
     const interiorCount = baseConfig.siteCount - 2;
     const spacing = initialSnapshot.spacing;
     const angularFrequency =
-      (2 * baseConfig.waveSpeed * Math.sin(Math.PI / (2 * (interiorCount + 1)))) / spacing;
+      (2 *
+        baseConfig.waveSpeed *
+        Math.sin(Math.PI / (2 * (interiorCount + 1)))) /
+      spacing;
     const period = (2 * Math.PI) / angularFrequency;
     const steps = Math.round(period / dt);
 
@@ -92,13 +100,22 @@ describe('Classical1DFixedEngine', () => {
     const snapshot = engine.getSnapshot();
     const diagnostics = engine.getDiagnostics();
 
+    // Baseline re-locked after the coordinate-convention correction: the
+    // fixed-interval Gaussian now samples the full physical grid x_j=j/(N-1)
+    // with an unwrapped distance. A centred bump therefore evolves exactly
+    // symmetrically (displacement[16] === displacement[112]); the previous
+    // baseline was asymmetric because the bump was sampled on the periodic
+    // grid convention.
     expect(snapshot.time).toBeCloseTo(0.13124999999999995, 12);
-    expect(snapshot.displacement[16]).toBeCloseTo(0.0000891458010363549, 12);
-    expect(snapshot.displacement[64]).toBeCloseTo(0.07147365254761982, 12);
-    expect(snapshot.displacement[112]).toBeCloseTo(0.0001494047108146808, 12);
-    expect(snapshot.velocity[16]).toBeCloseTo(0.006126379784747328, 12);
-    expect(snapshot.velocity[64]).toBeCloseTo(-2.5724271710175337, 12);
-    expect(snapshot.totalEnergy).toBeCloseTo(4.10778945458447, 12);
-    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(0.0013632239642547732, 12);
+    expect(snapshot.displacement[16]).toBeCloseTo(0.00010201516226432243, 12);
+    expect(snapshot.displacement[64]).toBeCloseTo(0.06833278471836242, 12);
+    expect(snapshot.displacement[112]).toBeCloseTo(0.00010201516226432244, 12);
+    expect(snapshot.velocity[16]).toBeCloseTo(0.007006855085944003, 12);
+    expect(snapshot.velocity[64]).toBeCloseTo(-2.509371277619894, 12);
+    expect(snapshot.totalEnergy).toBeCloseTo(4.139644078450642, 12);
+    expect(diagnostics.relativeEnergyDrift).toBeCloseTo(
+      0.0013878492503075497,
+      12,
+    );
   });
 });

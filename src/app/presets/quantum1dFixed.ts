@@ -8,5 +8,6 @@ export const defaultQuantum1DFixedConfig: Quantum1DFixedConfig = {
   gaussianWidth: 0.08,
   momentumWidth: 2,
   modeNumber: 6,
+  modeNumbers: [1],
   initialPreset: 'site-localized',
 };

@@ -1,20 +1,10 @@
 import { bench, describe } from 'vitest';
-import {
-  Classical1DPeriodicEngine,
-} from '../../physics/classical/classical1dPeriodic';
+import { Classical1DPeriodicEngine } from '../../physics/classical/classical1dPeriodic';
 import { Classical2DEngine } from '../../physics/classical/classical2d';
-import {
-  Quantum1DPeriodicEngine,
-} from '../../physics/quantum/quantum1dPeriodic';
-import {
-  Quantum1DFixedEngine,
-} from '../../physics/quantum/quantum1dFixed';
-import {
-  Quantum2DPeriodicEngine,
-} from '../../physics/quantum/quantum2dPeriodic';
-import {
-  Quantum2DFixedEngine,
-} from '../../physics/quantum/quantum2dFixed';
+import { Quantum1DPeriodicEngine } from '../../physics/quantum/quantum1dPeriodic';
+import { Quantum1DFixedEngine } from '../../physics/quantum/quantum1dFixed';
+import { Quantum2DPeriodicEngine } from '../../physics/quantum/quantum2dPeriodic';
+import { Quantum2DFixedEngine } from '../../physics/quantum/quantum2dFixed';
 
 // 1D classical update + snapshot at the exposed resolutions.
 for (const siteCount of [128, 512, 2048]) {
@@ -25,6 +15,7 @@ for (const siteCount of [128, 512, 2048]) {
     amplitude: 0.9,
     initialCenter: 0.5,
     gaussianWidth: 0.06,
+    modeNumbers: [1],
     initialPreset: 'gaussian-displacement',
   });
   const frameDt = engine.getDiagnostics().recommendedDt;
@@ -47,6 +38,7 @@ for (const siteCount of [128, 512, 2048]) {
     gaussianWidth: 0.08,
     momentumWidth: 2,
     modeNumber: 6,
+    modeNumbers: [1],
     initialPreset: 'gaussian-wavepacket',
   });
   let simulatedTime = 0;
@@ -69,6 +61,7 @@ for (const siteCount of [129, 513, 2049]) {
     gaussianWidth: 0.08,
     momentumWidth: 2,
     modeNumber: 6,
+    modeNumbers: [1],
     initialPreset: 'gaussian-wavepacket',
   });
   let simulatedTime = 0;

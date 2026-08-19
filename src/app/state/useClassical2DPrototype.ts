@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { defaultClassical2DSquareConfig } from '../presets/classical2dSquare';
+import { defaultClassical2DTorusConfig } from '../presets/classical2dTorus';
 import { advanceSimulationClock } from './simulationClock';
 import {
   createFrameChannel,
@@ -40,15 +41,14 @@ export function useClassical2DPrototype(
   geometry: Classical2DGeometry,
   active = true,
 ): Classical2DControllerState {
-  const [config, setConfig] = useState<Classical2DConfig>({
-    ...defaultClassical2DSquareConfig,
-    geometry,
-  });
+  const [config, setConfig] = useState<Classical2DConfig>(
+    getDefault2DConfig(geometry),
+  );
   const [quantity, setQuantity] = useState<Classical2DQuantity>('displacement');
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [showLattice, setShowLattice] = useState(false);
-  const engineRef = useRef(new Classical2DEngine({ ...defaultClassical2DSquareConfig, geometry }));
+  const engineRef = useRef(new Classical2DEngine(getDefault2DConfig(geometry)));
   const carrySecondsRef = useRef(0);
   const simulatedTimeRef = useRef(0);
   const quantityRef = useRef<Classical2DQuantity>('displacement');
@@ -63,9 +63,14 @@ export function useClassical2DPrototype(
     engineRef.current.getDiagnostics(),
   );
   const [displayTime, setDisplayTime] = useState(0);
-  const [achievedSpeedRatio, setAchievedSpeedRatio] = useState<number | null>(null);
+  const [achievedSpeedRatio, setAchievedSpeedRatio] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
+    // Topology-specific presets are remapped when the geometry changes: the
+    // wraparound pulse and the zero-mean velocity correction only make sense
+    // with periodic edges, and the sine standing mode only with pinned edges.
     setConfig((currentConfig) => ({
       ...currentConfig,
       geometry,
@@ -73,7 +78,9 @@ export function useClassical2DPrototype(
         geometry === 'square-fixed'
           ? currentConfig.initialPreset === 'wraparound-pulse'
             ? 'central-gaussian-displacement'
-            : currentConfig.initialPreset
+            : currentConfig.initialPreset === 'zero-mean-gaussian-velocity'
+              ? 'central-gaussian-velocity'
+              : currentConfig.initialPreset
           : currentConfig.initialPreset === 'square-standing-mode-1-1'
             ? 'wraparound-pulse'
             : currentConfig.initialPreset,
@@ -126,10 +133,15 @@ export function useClassical2DPrototype(
       simulatedTimeRef.current += clockState.simulatedSeconds;
 
       if (clockState.consumedSubsteps > 0) {
-        frameChannel.publish(engineRef.current.getSnapshot(quantityRef.current));
+        frameChannel.publish(
+          engineRef.current.getSnapshot(quantityRef.current),
+        );
       }
 
-      rateTrackerRef.current.addFrame(elapsedSeconds, clockState.simulatedSeconds);
+      rateTrackerRef.current.addFrame(
+        elapsedSeconds,
+        clockState.simulatedSeconds,
+      );
       diagnosticsElapsed += elapsedSeconds;
       if (diagnosticsElapsed >= DIAGNOSTICS_UPDATE_INTERVAL_SECONDS) {
         diagnosticsElapsed = 0;
@@ -185,4 +197,10 @@ export function useClassical2DPrototype(
       setDisplayTime(simulatedTimeRef.current);
     },
   };
+}
+
+function getDefault2DConfig(geometry: Classical2DGeometry): Classical2DConfig {
+  return geometry === 'square-fixed'
+    ? defaultClassical2DSquareConfig
+    : defaultClassical2DTorusConfig;
 }

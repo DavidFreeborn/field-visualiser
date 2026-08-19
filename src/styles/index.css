@@ -78,8 +78,7 @@ textarea {
 }
 
 .control-panel,
-.visual-panel,
-.diagnostics-panel {
+.visual-panel {
   backdrop-filter: blur(20px);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -132,8 +131,7 @@ h1 {
   font-size: 0.98rem;
 }
 
-.control-header,
-.diagnostics-header {
+.control-header {
   display: flex;
   flex-wrap: wrap;
   gap: 0.8rem 1.5rem;
@@ -213,6 +211,30 @@ h1 {
   color: inherit;
 }
 
+.mode-picker {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.mode-picker > span {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.mode-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+}
+
+.mode-picker-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
+}
+
 .button-row,
 .toggle-row {
   display: flex;
@@ -258,7 +280,11 @@ h1 {
   gap: 0.85rem;
   padding: 1rem;
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 241, 236, 0.92));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.88),
+    rgba(244, 241, 236, 0.92)
+  );
   color: var(--text-muted);
   font-size: 0.95rem;
   font-weight: 600;
@@ -333,60 +359,6 @@ h1 {
   border: 1px solid rgba(23, 32, 42, 0.15);
 }
 
-.phase-wheel-center {
-  display: inline-block;
-  width: 2.4rem;
-  height: 2.4rem;
-  margin-bottom: 0.4rem;
-}
-
-/* Compact diagnostics inside the empty centre of the ring views. */
-.ring-center-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.ring-center-content {
-  max-width: 42%;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.ring-center-grid {
-  display: grid;
-  margin: 0;
-  gap: 0.15rem 1.1rem;
-  grid-template-columns: repeat(2, minmax(0, auto));
-  justify-content: center;
-}
-
-.ring-center-grid dt {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.ring-center-grid dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.85rem;
-  color: #17202a;
-}
-
-.ring-center-trace-legend {
-  font-size: 0.85rem;
-  margin-bottom: 0.4rem;
-}
-
-.ring-center-range {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.8rem;
-}
-
 .trace-swatch {
   display: inline-block;
   width: 0.9rem;
@@ -401,51 +373,17 @@ h1 {
 }
 
 .trace-swatch-imaginary {
-  background: repeating-linear-gradient(90deg, #e08214 0 5px, transparent 5px 8px);
+  background: repeating-linear-gradient(
+    90deg,
+    #e08214 0 5px,
+    transparent 5px 8px
+  );
 }
 
 .legend-row-traces {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.4rem;
-}
-
-.status-strip {
-  padding: 0.9rem 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface);
-}
-
-.status-grid {
-  display: grid;
-  margin: 0;
-  gap: 0.35rem 1.4rem;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-}
-
-.status-grid dt {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.status-grid dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.95rem;
-}
-
-.status-warning {
-  margin-top: 0.6rem;
-  padding: 0.45rem 0.7rem;
-  border-radius: 10px;
-  background: rgba(159, 31, 39, 0.1);
-  color: var(--accent);
-  font-size: 0.88rem;
-  font-weight: 600;
 }
 
 @media (max-width: 900px) {

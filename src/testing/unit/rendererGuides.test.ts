@@ -11,7 +11,10 @@ import type { Classical2DSnapshot } from '../../physics/classical/classical2d';
 const WIDTH = 800;
 const HEIGHT = 540;
 
-function makePeriodic1DSnapshot(siteCount: number, time = 0): Classical1DPeriodicSnapshot {
+function makePeriodic1DSnapshot(
+  siteCount: number,
+  time = 0,
+): Classical1DPeriodicSnapshot {
   const displacement = new Float64Array(siteCount);
   const velocity = new Float64Array(siteCount);
   const localEnergyDensity = new Float64Array(siteCount);
@@ -84,14 +87,26 @@ const baseOptions = {
 
 describe('guide layer lifecycle (defect A)', () => {
   it('keeps the guide geometry count constant over 1000 deforming-ring frames', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
-    renderer.renderScene(makePeriodic1DSnapshot(128, 0), baseOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makePeriodic1DSnapshot(128, 0),
+      baseOptions,
+      WIDTH,
+      HEIGHT,
+    );
     const initialCount = renderer.getGuideInstructionCount();
     expect(initialCount).toBeGreaterThan(0);
 
     for (let frame = 1; frame <= 1000; frame += 1) {
-      renderer.renderScene(makePeriodic1DSnapshot(128, frame * 0.016), baseOptions, WIDTH, HEIGHT);
+      renderer.renderScene(
+        makePeriodic1DSnapshot(128, frame * 0.016),
+        baseOptions,
+        WIDTH,
+        HEIGHT,
+      );
     }
 
     expect(renderer.getGuideInstructionCount()).toBe(initialCount);
@@ -99,15 +114,27 @@ describe('guide layer lifecycle (defect A)', () => {
   });
 
   it('keeps the guide geometry count constant over 1000 fixed-ring frames', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
     const options = { ...baseOptions, circleGeometryMode: 'fixed' } as const;
 
-    renderer.renderScene(makePeriodic1DSnapshot(128, 0), options, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makePeriodic1DSnapshot(128, 0),
+      options,
+      WIDTH,
+      HEIGHT,
+    );
     const initialCount = renderer.getGuideInstructionCount();
     expect(initialCount).toBeGreaterThan(0);
 
     for (let frame = 1; frame <= 1000; frame += 1) {
-      renderer.renderScene(makePeriodic1DSnapshot(128, frame * 0.016), options, WIDTH, HEIGHT);
+      renderer.renderScene(
+        makePeriodic1DSnapshot(128, frame * 0.016),
+        options,
+        WIDTH,
+        HEIGHT,
+      );
     }
 
     expect(renderer.getGuideInstructionCount()).toBe(initialCount);
@@ -115,9 +142,16 @@ describe('guide layer lifecycle (defect A)', () => {
   });
 
   it('removes the circle guide when switching from a circular view to a 2D heatmap', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
-    renderer.renderScene(makePeriodic1DSnapshot(128), baseOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makePeriodic1DSnapshot(128),
+      baseOptions,
+      WIDTH,
+      HEIGHT,
+    );
     expect(renderer.getGuideInstructionCount()).toBeGreaterThan(0);
 
     renderer.renderScene(
@@ -131,7 +165,9 @@ describe('guide layer lifecycle (defect A)', () => {
   });
 
   it('removes the circle guide when switching from the fixed ring to a 2D heatmap', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
     renderer.renderScene(
       makePeriodic1DSnapshot(128),
@@ -152,9 +188,16 @@ describe('guide layer lifecycle (defect A)', () => {
   });
 
   it('replaces the circle guide with plot guides when switching circle -> interval', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
-    renderer.renderScene(makePeriodic1DSnapshot(128), baseOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makePeriodic1DSnapshot(128),
+      baseOptions,
+      WIDTH,
+      HEIGHT,
+    );
     const circleCount = renderer.getGuideInstructionCount();
     expect(circleCount).toBeGreaterThan(0);
 
@@ -179,7 +222,9 @@ describe('guide layer lifecycle (defect A)', () => {
   });
 
   it('restores guides when switching 2D -> circle after a 2D view', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
     renderer.renderScene(
       make2DSnapshot(48),
@@ -189,13 +234,20 @@ describe('guide layer lifecycle (defect A)', () => {
     );
     expect(renderer.getGuideInstructionCount()).toBe(0);
 
-    renderer.renderScene(makePeriodic1DSnapshot(128), baseOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makePeriodic1DSnapshot(128),
+      baseOptions,
+      WIDTH,
+      HEIGHT,
+    );
     expect(renderer.getGuideInstructionCount()).toBeGreaterThan(0);
     renderer.destroy();
   });
 
   it('clears interval plot guides when switching interval -> 2D', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
     renderer.renderScene(
       makeFixed1DSnapshot(129),
@@ -218,7 +270,9 @@ describe('guide layer lifecycle (defect A)', () => {
 
 describe('pixel-budget level of detail (defect F)', () => {
   it('bounds rendered primitives independently of lattice size on the plot view', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
     const options = {
       showLattice: true,
       showSprings: true,
@@ -239,8 +293,31 @@ describe('pixel-budget level of detail (defect F)', () => {
     renderer.destroy();
   });
 
+  it('never fills the ring envelope band above the pixel budget (freeze regression)', () => {
+    // Filling the closed ring-band polygon at binned site counts triangulated
+    // pathologically in Pixi (~1.5 s per frame at 2048 sites); the envelope
+    // must be drawn as strokes on ring geometry.
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
+    const options = {
+      showLattice: false,
+      showSprings: false,
+      quantity: 'displacement',
+      oneDView: 'ring',
+    } as const;
+
+    renderer.renderScene(makePeriodic1DSnapshot(2048), options, WIDTH, HEIGHT);
+    expect(renderer.getEnvelopeFillInstructionCount()).toBe(0);
+    // The envelope information itself is still present (stroked min/max).
+    expect(renderer.getPrimitiveInstructionCount()).toBeGreaterThan(0);
+    renderer.destroy();
+  });
+
   it('bounds rendered primitives on the fixed ring independent of lattice size', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
     const options = {
       showLattice: true,
       showSprings: true,

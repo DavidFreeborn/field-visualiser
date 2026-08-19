@@ -11,6 +11,7 @@ const baseConfig: Quantum1DPeriodicConfig = {
   gaussianWidth: 0.08,
   momentumWidth: 2,
   modeNumber: 6,
+  modeNumbers: [1],
   initialPreset: 'gaussian-wavepacket',
 };
 
@@ -45,14 +46,16 @@ describe('Quantum1DPeriodicEngine', () => {
     const engine = new Quantum1DPeriodicEngine({
       ...baseConfig,
       initialPreset: 'selected-normal-mode',
-      modeNumber,
+      modeNumbers: [modeNumber],
     });
 
     const initialSnapshot = engine.getSnapshot('real-part');
     const dt = 0.137;
     const spacing = initialSnapshot.spacing;
     const angularFrequency =
-      (2 * baseConfig.waveSpeed * Math.sin((Math.PI * modeNumber) / baseConfig.siteCount)) /
+      (2 *
+        baseConfig.waveSpeed *
+        Math.sin((Math.PI * modeNumber) / baseConfig.siteCount)) /
       spacing;
 
     engine.step(dt);
@@ -62,7 +65,11 @@ describe('Quantum1DPeriodicEngine', () => {
     const cosPhase = Math.cos(expectedPhase);
     const sinPhase = Math.sin(expectedPhase);
 
-    for (let index = 0; index < initialSnapshot.amplitudeReal.length; index += 1) {
+    for (
+      let index = 0;
+      index < initialSnapshot.amplitudeReal.length;
+      index += 1
+    ) {
       const expectedReal =
         initialSnapshot.amplitudeReal[index] * cosPhase -
         initialSnapshot.amplitudeImaginary[index] * sinPhase;
@@ -71,7 +78,10 @@ describe('Quantum1DPeriodicEngine', () => {
         initialSnapshot.amplitudeImaginary[index] * cosPhase;
 
       expect(finalSnapshot.amplitudeReal[index]).toBeCloseTo(expectedReal, 10);
-      expect(finalSnapshot.amplitudeImaginary[index]).toBeCloseTo(expectedImaginary, 10);
+      expect(finalSnapshot.amplitudeImaginary[index]).toBeCloseTo(
+        expectedImaginary,
+        10,
+      );
       expect(finalSnapshot.probabilityDensity[index]).toBeCloseTo(
         initialSnapshot.probabilityDensity[index],
         10,
@@ -91,11 +101,23 @@ describe('Quantum1DPeriodicEngine', () => {
     const diagnostics = engine.getDiagnostics();
 
     expect(snapshot.time).toBeCloseTo(0.020453077171808547, 12);
-    expect(snapshot.probabilityDensity[0]).toBeCloseTo(3.416745547983585e-10, 12);
-    expect(snapshot.probabilityDensity[32]).toBeCloseTo(5.895719816781625e-7, 12);
-    expect(snapshot.probabilityDensity[64]).toBeCloseTo(0.05170138211164921, 12);
+    expect(snapshot.probabilityDensity[0]).toBeCloseTo(
+      3.416745547983585e-10,
+      12,
+    );
+    expect(snapshot.probabilityDensity[32]).toBeCloseTo(
+      5.895719816781625e-7,
+      12,
+    );
+    expect(snapshot.probabilityDensity[64]).toBeCloseTo(
+      0.05170138211164921,
+      12,
+    );
     expect(snapshot.amplitudeReal[32]).toBeCloseTo(-0.0005316483713658126, 12);
-    expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(0.0005540054069250963, 12);
+    expect(snapshot.amplitudeImaginary[32]).toBeCloseTo(
+      0.0005540054069250963,
+      12,
+    );
     expect(snapshot.totalNorm).toBeCloseTo(1, 12);
     expect(diagnostics.normError).toBeLessThan(1e-12);
   });

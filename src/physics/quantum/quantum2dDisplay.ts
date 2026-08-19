@@ -11,7 +11,7 @@ export interface Quantum2DDisplaySnapshot {
   readonly time: number;
   readonly systemLabel: '2D torus' | '2D square';
   readonly boundaryCondition: 'periodic' | 'dirichlet';
-  readonly modeLabel: 'free-field one-particle';
+  readonly modeLabel: 'square-root lattice quantum model';
   readonly quantity: Quantum2DDisplayQuantity;
   readonly width: number;
   readonly height: number;

@@ -15,7 +15,9 @@ const noop = (): void => undefined;
 
 function optionValuesOf(labelPattern: RegExp): string[] {
   const select = screen.getByLabelText(labelPattern);
-  return [...(select as HTMLSelectElement).options].map((option) => option.value);
+  return [...(select as HTMLSelectElement).options].map(
+    (option) => option.value,
+  );
 }
 
 describe('displayed-quantity options per control panel', () => {
@@ -42,6 +44,8 @@ describe('displayed-quantity options per control panel', () => {
         onShowSpringsChange={noop}
         onSpeedChange={noop}
         onStep={noop}
+        view1d="ring"
+        onView1dChange={noop}
       />,
     );
     const values = optionValuesOf(/^quantity$/i);
@@ -72,6 +76,8 @@ describe('displayed-quantity options per control panel', () => {
         onShowSpringsChange={noop}
         onSpeedChange={noop}
         onStep={noop}
+        view1d="ring"
+        onView1dChange={noop}
       />,
     );
     expect(optionValuesOf(/^quantity$/i)).toContain('energy-density');
@@ -100,6 +106,8 @@ describe('displayed-quantity options per control panel', () => {
         onShowSpringsChange={noop}
         onSpeedChange={noop}
         onStep={noop}
+        view1d="ring"
+        onView1dChange={noop}
       />,
     );
     expect(optionValuesOf(/^quantity$/i)).toContain('energy-density');
@@ -108,33 +116,40 @@ describe('displayed-quantity options per control panel', () => {
   it.each([
     ['square-fixed', defaultClassical2DSquareConfig],
     ['torus-periodic', defaultClassical2DTorusConfig],
-  ] as const)('classical 2D %s offers local energy density', (geometry, config) => {
-    render(
-      <Classical2DControls
-        config={config}
-        geometry={geometry}
-        mode="classical"
-        playing
-        quantity="displacement"
-        showLattice={false}
-        speed={1}
-        onConfigChange={noop}
-        onGeometryChange={noop}
-        onModeChange={noop}
-        onPlayingChange={noop}
-        onQuantityChange={noop}
-        onReset={noop}
-        onShowLatticeChange={noop}
-        onSpeedChange={noop}
-        onStep={noop}
-      />,
-    );
-    const values = optionValuesOf(/quantity/i);
-    expect(values).toContain('energy-density');
-    expect(values).not.toContain('real-imaginary-parts');
-  });
+  ] as const)(
+    'classical 2D %s offers local energy density',
+    (geometry, config) => {
+      render(
+        <Classical2DControls
+          config={config}
+          geometry={geometry}
+          mode="classical"
+          playing
+          quantity="displacement"
+          showLattice={false}
+          speed={1}
+          onConfigChange={noop}
+          onGeometryChange={noop}
+          onModeChange={noop}
+          onPlayingChange={noop}
+          onQuantityChange={noop}
+          onReset={noop}
+          onShowLatticeChange={noop}
+          onSpeedChange={noop}
+          onStep={noop}
+        />,
+      );
+      const values = optionValuesOf(/quantity/i);
+      expect(values).toContain('energy-density');
+      expect(values).not.toContain('real-imaginary-parts');
+    },
+  );
 
-  it.each(['periodic-circle', 'periodic-circle-fixed', 'fixed-interval'] as const)(
+  it.each([
+    'periodic-circle',
+    'periodic-circle-fixed',
+    'fixed-interval',
+  ] as const)(
     'quantum 1D %s offers the combined real and imaginary view',
     (geometry) => {
       render(
@@ -159,6 +174,8 @@ describe('displayed-quantity options per control panel', () => {
           onShowLatticeChange={noop}
           onSpeedChange={noop}
           onStep={noop}
+          view1d="ring"
+          onView1dChange={noop}
         />,
       );
       const values = optionValuesOf(/displayed quantity/i);

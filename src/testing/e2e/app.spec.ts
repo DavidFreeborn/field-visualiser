@@ -15,25 +15,35 @@ test('loads the application shell', async ({ page }) => {
   ).toBeVisible();
 
   await page.getByLabel('Geometry').selectOption('fixed-interval');
-  await expect(page.getByText(/classical nearest-neighbour line with fixed zero endpoints/i)).toBeVisible();
+  await expect(
+    page.getByText(
+      /classical nearest-neighbour line with fixed zero endpoints/i,
+    ),
+  ).toBeVisible();
 
   await page.getByLabel('Geometry').selectOption('periodic-circle-fixed');
   await expect(
     page.getByText(/shown on a fixed circular domain with color encoding/i),
   ).toBeVisible();
 
-  await page.getByLabel(/interpretation mode/i).selectOption('quantum-one-particle');
+  await page.getByLabel(/field type/i).selectOption('quantum-one-particle');
   await expect(
-    page.getByText(/free-field one-particle evolution on the periodic lattice hilbert space, shown on a fixed circular domain with color encoding/i),
+    page.getByText(
+      /square-root lattice quantum model on the periodic lattice, shown on a fixed circular domain with color encoding/i,
+    ),
   ).toBeVisible();
 
   await page.getByLabel('Geometry').selectOption('torus-periodic');
   await expect(
-    page.getByText(/exact separable phase evolution in a 2d periodic normal-mode basis/i),
+    page.getByText(
+      /exact separable phase evolution in a 2d periodic normal-mode basis/i,
+    ),
   ).toBeVisible();
 });
 
-test('opens periodic 1D as a circle and retains energy density across geometry changes', async ({ page }) => {
+test('opens periodic 1D as a circle and retains energy density across geometry changes', async ({
+  page,
+}) => {
   await page.goto('/');
 
   // The circle is the default representation for periodic geometries.
@@ -76,9 +86,13 @@ test('restores a shared scene from the URL state', async ({ page }) => {
   await page.goto(`/?scene=${sharedScene}`);
 
   await expect(
-    page.getByText(/free-field one-particle evolution on a fixed-end interval/i),
+    page.getByText(
+      /square-root lattice quantum model on a fixed-end interval/i,
+    ),
   ).toBeVisible();
   await expect(page.getByLabel('Geometry')).toHaveValue('fixed-interval');
-  await expect(page.getByLabel(/interpretation mode/i)).toHaveValue('quantum-one-particle');
+  await expect(page.getByLabel(/field type/i)).toHaveValue(
+    'quantum-one-particle',
+  );
   await expect(page.getByRole('button', { name: /^play$/i })).toBeVisible();
 });

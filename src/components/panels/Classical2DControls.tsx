@@ -27,9 +27,14 @@ interface Classical2DControlsProps {
 
 const resolutionOptions = [24, 32, 48, 64, 96, 128, 160, 192, 256] as const;
 
+// The positive-mean torus velocity bump (which excites the periodic uniform
+// mode) is engine/test-only and not offered on the torus; on the fixed square
+// the plain velocity bump has no zero mode to worry about.
 const initialPresetLabels: Record<Classical2DInitialPreset, string> = {
-  'central-gaussian-displacement': 'Central Gaussian displacement',
+  'central-gaussian-displacement':
+    'Central Gaussian displacement, spreads outward',
   'central-gaussian-velocity': 'Central Gaussian velocity',
+  'zero-mean-gaussian-velocity': 'Central Gaussian velocity, zero mean',
   'square-standing-mode-1-1': 'Low standing mode (1,1)',
   'wraparound-pulse': 'Wraparound pulse',
   'compact-pulse': 'Compact localized pulse',
@@ -63,10 +68,12 @@ export function Classical2DControls({
         ]
       : [
           'central-gaussian-displacement',
-          'central-gaussian-velocity',
+          'zero-mean-gaussian-velocity',
           'wraparound-pulse',
           'compact-pulse',
         ];
+  const presetLabel = (preset: Classical2DInitialPreset): string =>
+    initialPresetLabels[preset];
 
   return (
     <section className="control-panel">
@@ -79,10 +86,7 @@ export function Classical2DControls({
       </div>
 
       <div className="control-grid">
-        <ModeSwitch
-          mode={mode}
-          onModeChange={onModeChange}
-        />
+        <ModeSwitch mode={mode} onModeChange={onModeChange} />
         <GeometrySwitch
           geometry={geometry}
           mode={mode}
@@ -100,11 +104,8 @@ export function Classical2DControls({
             }
           >
             {allowedPresets.map((preset: Classical2DInitialPreset) => (
-              <option
-                key={preset}
-                value={preset}
-              >
-                {initialPresetLabels[preset]}
+              <option key={preset} value={preset}>
+                {presetLabel(preset)}
               </option>
             ))}
           </select>
@@ -121,10 +122,7 @@ export function Classical2DControls({
             }
           >
             {resolutionOptions.map((size) => (
-              <option
-                key={size}
-                value={size}
-              >
+              <option key={size} value={size}>
                 {`${size} × ${size}`}
               </option>
             ))}
@@ -134,7 +132,9 @@ export function Classical2DControls({
           <span>Quantity</span>
           <select
             value={quantity}
-            onChange={(event) => onQuantityChange(event.target.value as Classical2DQuantity)}
+            onChange={(event) =>
+              onQuantityChange(event.target.value as Classical2DQuantity)
+            }
           >
             <option value="displacement">Displacement</option>
             <option value="velocity">Velocity</option>
@@ -174,18 +174,10 @@ export function Classical2DControls({
         >
           {playing ? 'Pause' : 'Play'}
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onStep}
-        >
+        <button className="secondary-button" type="button" onClick={onStep}>
           Single step
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onReset}
-        >
+        <button className="secondary-button" type="button" onClick={onReset}>
           Reset
         </button>
       </div>

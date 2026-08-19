@@ -2,7 +2,10 @@ import { useEffect } from 'react';
 import { vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { buildSceneSearch, type SceneStateV1 } from '../../app/state/sceneState';
+import {
+  buildSceneSearch,
+  type SceneStateV1,
+} from '../../app/state/sceneState';
 
 const prototypeCanvasMountSpy = vi.fn();
 const prototypeCanvasUnmountSpy = vi.fn();
@@ -38,9 +41,15 @@ describe('App', () => {
       }),
     ).toBeInTheDocument();
 
-    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue('Classical field')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Periodic circle, deforming')).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('Periodic circle, deforming'),
+    ).toBeInTheDocument();
   });
 
   it('switches to the quantum one-particle controls', async () => {
@@ -49,12 +58,68 @@ describe('App', () => {
     render(<App />);
 
     await user.selectOptions(
-      screen.getByLabelText(/interpretation mode/i),
+      screen.getByLabelText(/field type/i),
       'quantum-one-particle',
     );
 
-    expect(screen.getByText(/free-field one-particle evolution on the periodic lattice hilbert space, shown on a deforming circular embedding/i)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Site probability |ψᵢ|²')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /square-root lattice quantum model on the periodic lattice, shown on a deforming circular embedding/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('Site probability |ψᵢ|²'),
+    ).toBeInTheDocument();
+  });
+
+  it('resets the destination model to time zero when switching mode or geometry', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+    const sceneLayout = screen.getByTestId('scene-layout');
+
+    // Advance the classical simulation with explicit single steps.
+    await user.click(screen.getByRole('button', { name: /single step/i }));
+    await user.click(screen.getByRole('button', { name: /single step/i }));
+    expect(Number(sceneLayout.dataset.displayTime)).toBeGreaterThan(0);
+
+    // Switching to a physically different model must start at time zero.
+    await user.selectOptions(
+      screen.getByLabelText(/field type/i),
+      'quantum-one-particle',
+    );
+    expect(Number(sceneLayout.dataset.displayTime)).toBe(0);
+
+    // Advance the quantum model, then return to classical: the classical
+    // destination is also freshly reset rather than resuming its old time.
+    await user.click(screen.getByRole('button', { name: /single step/i }));
+    expect(Number(sceneLayout.dataset.displayTime)).toBeGreaterThan(0);
+    await user.selectOptions(screen.getByLabelText(/field type/i), 'classical');
+    expect(Number(sceneLayout.dataset.displayTime)).toBe(0);
+
+    // Changing the initial state resets to time zero.
+    await user.click(screen.getByRole('button', { name: /single step/i }));
+    expect(Number(sceneLayout.dataset.displayTime)).toBeGreaterThan(0);
+    await user.selectOptions(
+      screen.getByLabelText(/initial condition/i),
+      'standing-modes',
+    );
+    expect(Number(sceneLayout.dataset.displayTime)).toBe(0);
+
+    // Ticking an extra standing mode resets to time zero.
+    await user.click(screen.getByRole('button', { name: /single step/i }));
+    expect(Number(sceneLayout.dataset.displayTime)).toBeGreaterThan(0);
+    await user.click(screen.getByRole('checkbox', { name: '3' }));
+    expect(Number(sceneLayout.dataset.displayTime)).toBe(0);
+
+    // Changing the lattice density resets to time zero.
+    await user.click(screen.getByRole('button', { name: /single step/i }));
+    expect(Number(sceneLayout.dataset.displayTime)).toBeGreaterThan(0);
+    await user.selectOptions(
+      screen.getByLabelText(/oscillator density/i),
+      '256',
+    );
+    expect(Number(sceneLayout.dataset.displayTime)).toBe(0);
   });
 
   it('switches to the fixed-ring periodic circle controls', async () => {
@@ -62,12 +127,17 @@ describe('App', () => {
 
     render(<App />);
 
-    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'periodic-circle-fixed');
+    await user.selectOptions(
+      screen.getByLabelText(/^geometry$/i),
+      'periodic-circle-fixed',
+    );
 
     expect(
       screen.getByText(/shown on a fixed circular domain with color encoding/i),
     ).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Periodic circle, fixed ring')).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('Periodic circle, fixed ring'),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/circle motion/i)).not.toBeInTheDocument();
   });
 
@@ -76,9 +146,16 @@ describe('App', () => {
 
     render(<App />);
 
-    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'fixed-interval');
+    await user.selectOptions(
+      screen.getByLabelText(/^geometry$/i),
+      'fixed-interval',
+    );
 
-    expect(screen.getByText(/classical nearest-neighbour line with fixed zero endpoints/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /classical nearest-neighbour line with fixed zero endpoints/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue('Fixed-end interval')).toBeInTheDocument();
   });
 
@@ -87,10 +164,17 @@ describe('App', () => {
 
     render(<App />);
 
-    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'square-fixed');
+    await user.selectOptions(
+      screen.getByLabelText(/^geometry$/i),
+      'square-fixed',
+    );
 
-    expect(screen.getByText(/fixed zero boundaries on all edges/i)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('2D square, fixed edges')).toBeInTheDocument();
+    expect(
+      screen.getByText(/fixed zero boundaries on all edges/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('2D square, fixed edges'),
+    ).toBeInTheDocument();
   });
 
   it('switches to the 2D torus quantum controls', async () => {
@@ -98,13 +182,20 @@ describe('App', () => {
 
     render(<App />);
 
-    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'torus-periodic');
     await user.selectOptions(
-      screen.getByLabelText(/interpretation mode/i),
+      screen.getByLabelText(/^geometry$/i),
+      'torus-periodic',
+    );
+    await user.selectOptions(
+      screen.getByLabelText(/field type/i),
       'quantum-one-particle',
     );
 
-    expect(screen.getByText(/exact separable phase evolution in a 2d periodic normal-mode basis/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /exact separable phase evolution in a 2d periodic normal-mode basis/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue('2D torus, periodic')).toBeInTheDocument();
   });
 
@@ -114,16 +205,27 @@ describe('App', () => {
     render(<App />);
 
     await user.selectOptions(
-      screen.getByLabelText(/interpretation mode/i),
+      screen.getByLabelText(/field type/i),
       'quantum-one-particle',
     );
-    expect(screen.getByText(/free-field one-particle evolution on the periodic lattice hilbert space/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /square-root lattice quantum model on the periodic lattice/i,
+      ),
+    ).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText(/^geometry$/i), 'square-fixed');
-    expect(screen.getByText(/fixed zero boundary amplitudes/i)).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByLabelText(/^geometry$/i),
+      'square-fixed',
+    );
+    expect(
+      screen.getByText(/fixed zero boundary amplitudes/i),
+    ).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText(/interpretation mode/i), 'classical');
-    expect(screen.getByText(/fixed zero boundaries on all edges/i)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(/field type/i), 'classical');
+    expect(
+      screen.getByText(/fixed zero boundaries on all edges/i),
+    ).toBeInTheDocument();
   });
 
   it('reduces outer chrome in embedded mode while keeping the app usable', () => {
@@ -134,7 +236,11 @@ describe('App', () => {
         name: /visualising free fields/i,
       }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('restores a valid shared scene from the URL', async () => {
@@ -161,18 +267,28 @@ describe('App', () => {
       },
     };
 
-    window.history.replaceState({}, '', buildSceneSearch(sharedScene, '', { preserveEmbed: false }));
+    window.history.replaceState(
+      {},
+      '',
+      buildSceneSearch(sharedScene, '', { preserveEmbed: false }),
+    );
 
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/fixed zero boundary amplitudes/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/fixed zero boundary amplitudes/i),
+      ).toBeInTheDocument();
       expect(screen.getByDisplayValue('Magnitude |ψ|')).toBeInTheDocument();
     });
 
-    expect(screen.getByDisplayValue('2D square, fixed edges')).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('2D square, fixed edges'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
-    expect(decodeURIComponent(window.location.search)).toContain('"geometry":"square-fixed"');
+    expect(decodeURIComponent(window.location.search)).toContain(
+      '"geometry":"square-fixed"',
+    );
   });
 
   it('falls back safely when the URL scene state is malformed', () => {
@@ -180,9 +296,15 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(screen.getByText(/classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /classical nearest-neighbour ring with periodic wraparound, shown as a deforming circular embedding/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue('Classical field')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Periodic circle, deforming')).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('Periodic circle, deforming'),
+    ).toBeInTheDocument();
   });
 
   it('does not remount the canvas during URL-driven scene restoration', async () => {
@@ -206,12 +328,18 @@ describe('App', () => {
       },
     };
 
-    window.history.replaceState({}, '', buildSceneSearch(sharedScene, '', { preserveEmbed: false }));
+    window.history.replaceState(
+      {},
+      '',
+      buildSceneSearch(sharedScene, '', { preserveEmbed: false }),
+    );
 
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/opposite edges identified/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/opposite edges identified/i),
+      ).toBeInTheDocument();
     });
 
     expect(prototypeCanvasMountSpy).toHaveBeenCalledTimes(1);

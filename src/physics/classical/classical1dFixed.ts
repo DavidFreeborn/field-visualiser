@@ -3,11 +3,23 @@ import {
   type ClassicalPeriodicEnergyBreakdown1D,
 } from '../core/invariants';
 import { applyDirichletLaplacian1D } from '../core/operators';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
 import {
-  createGaussianBump1D,
-  createStandingModeDirichlet1D,
-  type Classical1DInitialPreset,
+  assertFiniteNumber,
+  assertModeNumberList,
+  assertPositiveFinite,
+  assertUnitInterval,
+  computeRelativeEnergyDrift,
+  computeSubstepCount,
+} from '../core/validation';
+import {
+  CLASSICAL_1D_FIXED_PRESETS,
+  createGaussianBumpFixed1D,
+  createStandingModesDirichlet1D,
+  type Classical1DFixedInitialPreset,
 } from './initialConditions';
 
 export interface Classical1DFixedConfig {
@@ -17,10 +29,15 @@ export interface Classical1DFixedConfig {
   readonly amplitude: number;
   readonly initialCenter: number;
   readonly gaussianWidth: number;
-  readonly initialPreset: Classical1DInitialPreset;
+  /** Standing-mode numbers used by the 'standing-modes' preset. */
+  readonly modeNumbers: readonly number[];
+  readonly initialPreset: Classical1DFixedInitialPreset;
 }
 
-export type Classical1DFixedQuantity = 'displacement' | 'velocity' | 'energy-density';
+export type Classical1DFixedQuantity =
+  | 'displacement'
+  | 'velocity'
+  | 'energy-density';
 
 export interface Classical1DFixedSnapshot {
   readonly kind: 'classical-1d-fixed';
@@ -47,10 +64,11 @@ export interface Classical1DFixedDiagnostics extends SimulationDiagnostics {
 
 const STABILITY_SAFETY_FACTOR = 0.7;
 
-export class Classical1DFixedEngine
-  implements
-    SimulationEngine<Classical1DFixedConfig, Classical1DFixedSnapshot, Classical1DFixedDiagnostics>
-{
+export class Classical1DFixedEngine implements SimulationEngine<
+  Classical1DFixedConfig,
+  Classical1DFixedSnapshot,
+  Classical1DFixedDiagnostics
+> {
   private config: Classical1DFixedConfig | null = null;
   private time = 0;
   private spacing = 1;
@@ -84,12 +102,16 @@ export class Classical1DFixedEngine
   }
 
   public step(dt: number): void {
-    if (dt <= 0) {
+    if (this.config === null) {
+      throw new Error('Engine has not been initialised.');
+    }
+
+    const substeps = computeSubstepCount(dt, this.getMaxStableDt() * 0.95);
+
+    if (substeps === 0) {
       return;
     }
 
-    const maxStableDt = this.getMaxStableDt();
-    const substeps = Math.max(1, Math.ceil(dt / (maxStableDt * 0.95)));
     const substepDt = dt / substeps;
 
     for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
@@ -136,7 +158,10 @@ export class Classical1DFixedEngine
       recommendedDt,
       stabilityRatio: recommendedDt / maxStableDt,
       totalEnergy,
-      relativeEnergyDrift: Math.abs(totalEnergy - this.energyBaseline) / this.energyBaseline,
+      relativeEnergyDrift: computeRelativeEnergyDrift(
+        this.energyBaseline,
+        totalEnergy,
+      ),
     };
   }
 
@@ -170,7 +195,11 @@ export class Classical1DFixedEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    applyDirichletLaplacian1D(this.displacement, this.inverseSpacingSquared, this.acceleration);
+    applyDirichletLaplacian1D(
+      this.displacement,
+      this.inverseSpacingSquared,
+      this.acceleration,
+    );
 
     const accelerationScale = this.config.waveSpeed * this.config.waveSpeed;
 
@@ -210,8 +239,10 @@ function createInitialState(config: Classical1DFixedConfig): {
 
   switch (config.initialPreset) {
     case 'gaussian-displacement':
+      // The fixed interval uses the full physical coordinate grid x_j = j/(N-1)
+      // with an ordinary, non-wrapped distance.
       displacement.set(
-        createGaussianBump1D(config.siteCount, {
+        createGaussianBumpFixed1D(config.siteCount, {
           amplitude: config.amplitude,
           center: config.initialCenter,
           width: config.gaussianWidth,
@@ -220,7 +251,7 @@ function createInitialState(config: Classical1DFixedConfig): {
       break;
     case 'gaussian-velocity':
       velocity.set(
-        createGaussianBump1D(config.siteCount, {
+        createGaussianBumpFixed1D(config.siteCount, {
           amplitude: config.amplitude,
           center: config.initialCenter,
           width: config.gaussianWidth,
@@ -228,14 +259,24 @@ function createInitialState(config: Classical1DFixedConfig): {
       );
       break;
     case 'single-site-displacement':
-      displacement[Math.max(1, Math.min(config.siteCount - 2, Math.round(config.initialCenter * (config.siteCount - 1))))] =
-        config.amplitude;
+      displacement[
+        Math.max(
+          1,
+          Math.min(
+            config.siteCount - 2,
+            Math.round(config.initialCenter * (config.siteCount - 1)),
+          ),
+        )
+      ] = config.amplitude;
       break;
-    case 'standing-mode-1':
-      displacement.set(createStandingModeDirichlet1D(config.siteCount, 1, config.amplitude));
-      break;
-    case 'standing-mode-2':
-      displacement.set(createStandingModeDirichlet1D(config.siteCount, 2, config.amplitude));
+    case 'standing-modes':
+      displacement.set(
+        createStandingModesDirichlet1D(
+          config.siteCount,
+          config.modeNumbers,
+          config.amplitude,
+        ),
+      );
       break;
   }
 
@@ -252,7 +293,26 @@ function assertValidConfig(config: Classical1DFixedConfig): void {
     throw new Error('siteCount must be an integer greater than or equal to 4.');
   }
 
-  if (config.domainLength <= 0 || config.waveSpeed <= 0 || config.gaussianWidth <= 0) {
-    throw new Error('domainLength, waveSpeed, and gaussianWidth must be positive.');
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertFiniteNumber(config.amplitude, 'amplitude');
+  assertUnitInterval(config.initialCenter, 'initialCenter');
+
+  if (config.initialPreset === 'standing-modes') {
+    // Distinct Dirichlet sine modes: 1 .. siteCount - 2.
+    assertModeNumberList(
+      config.modeNumbers,
+      'modeNumbers',
+      1,
+      config.siteCount - 2,
+    );
+  }
+
+  if (!CLASSICAL_1D_FIXED_PRESETS.includes(config.initialPreset)) {
+    throw new Error(
+      `initialPreset '${String(config.initialPreset)}' is not valid for fixed (Dirichlet) ` +
+        'endpoints: a globally one-way or zero-mean-corrected state has no meaning there.',
+    );
   }
 }

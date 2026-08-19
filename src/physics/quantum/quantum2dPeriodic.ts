@@ -1,6 +1,15 @@
 import { fastForwardDftUnitary2D, fastInverseDftUnitary2D } from '../core/fft';
 import { flattenIndex2D } from '../core/grids';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
+import {
+  assertIntegerInRange,
+  assertPositiveFinite,
+  assertResolvableQuantumTime,
+  assertUnitInterval,
+} from '../core/validation';
 import { computeDiscreteNorm } from './initialStates';
 import type { Quantum2DDisplaySnapshot } from './quantum2dDisplay';
 import {
@@ -33,7 +42,7 @@ export interface Quantum2DPeriodicSnapshot {
   readonly time: number;
   readonly systemLabel: '2D torus';
   readonly boundaryCondition: 'periodic';
-  readonly modeLabel: 'free-field one-particle';
+  readonly modeLabel: 'square-root lattice quantum model';
   readonly quantity: Quantum2DPeriodicQuantity;
   readonly width: number;
   readonly height: number;
@@ -55,14 +64,11 @@ export interface Quantum2DPeriodicDiagnostics extends SimulationDiagnostics {
 
 const PHASE_SAMPLES_PER_FASTEST_PERIOD = 32;
 
-export class Quantum2DPeriodicEngine
-  implements
-    SimulationEngine<
-      Quantum2DPeriodicConfig,
-      Quantum2DPeriodicSnapshot,
-      Quantum2DPeriodicDiagnostics
-    >
-{
+export class Quantum2DPeriodicEngine implements SimulationEngine<
+  Quantum2DPeriodicConfig,
+  Quantum2DPeriodicSnapshot,
+  Quantum2DPeriodicDiagnostics
+> {
   private config: Quantum2DPeriodicConfig | null = null;
   private time = 0;
   private spacing = 1;
@@ -95,15 +101,18 @@ export class Quantum2DPeriodicEngine
       buildModeFrequencies2D(config.size, this.spacing, config.waveSpeed),
     );
 
-    const initialSiteState = createPeriodicQuantumInitialState2D(config.initialPreset, {
-      size: config.size,
-      centerX: config.initialCenterX,
-      centerY: config.initialCenterY,
-      gaussianWidth: config.gaussianWidth,
-      momentumWidth: config.momentumWidth,
-      modeNumberX: config.modeNumberX,
-      modeNumberY: config.modeNumberY,
-    });
+    const initialSiteState = createPeriodicQuantumInitialState2D(
+      config.initialPreset,
+      {
+        size: config.size,
+        centerX: config.initialCenterX,
+        centerY: config.initialCenterY,
+        gaussianWidth: config.gaussianWidth,
+        momentumWidth: config.momentumWidth,
+        modeNumberX: config.modeNumberX,
+        modeNumberY: config.modeNumberY,
+      },
+    );
 
     this.siteReal = new Float64Array(initialSiteState.real);
     this.siteImaginary = new Float64Array(initialSiteState.imaginary);
@@ -129,6 +138,10 @@ export class Quantum2DPeriodicEngine
   }
 
   public step(dt: number): void {
+    if (!Number.isFinite(dt)) {
+      throw new Error(`dt must be a finite number, received ${String(dt)}.`);
+    }
+
     if (dt <= 0) {
       return;
     }
@@ -141,6 +154,7 @@ export class Quantum2DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
+    assertResolvableQuantumTime(time, this.maximumFrequency);
     this.time = Math.max(0, time);
 
     for (let index = 0; index < this.modeReal.length; index += 1) {
@@ -186,7 +200,7 @@ export class Quantum2DPeriodicEngine
       time: this.time,
       systemLabel: '2D torus',
       boundaryCondition: 'periodic',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity,
       width: this.config.size,
       height: this.config.size,
@@ -206,7 +220,8 @@ export class Quantum2DPeriodicEngine
     const totalNorm = computeDiscreteNorm(this.modeReal, this.modeImaginary);
     const recommendedDt =
       this.maximumFrequency > 0
-        ? (2 * Math.PI) / (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
+        ? (2 * Math.PI) /
+          (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
         : 0.05;
 
     return {
@@ -239,8 +254,14 @@ export class Quantum2DPeriodicEngine
           ? auxTarget
           : new Float32Array(this.siteReal.length);
       for (let index = 0; index < this.siteReal.length; index += 1) {
-        displayValues[index] = Math.atan2(this.siteImaginary[index], this.siteReal[index]);
-        displayValuesAux[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+        displayValues[index] = Math.atan2(
+          this.siteImaginary[index],
+          this.siteReal[index],
+        );
+        displayValuesAux[index] = Math.hypot(
+          this.siteReal[index],
+          this.siteImaginary[index],
+        );
       }
     } else {
       for (let index = 0; index < this.siteReal.length; index += 1) {
@@ -252,7 +273,10 @@ export class Quantum2DPeriodicEngine
             displayValues[index] = this.siteImaginary[index];
             break;
           case 'magnitude':
-            displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+            displayValues[index] = Math.hypot(
+              this.siteReal[index],
+              this.siteImaginary[index],
+            );
             break;
           case 'probability-density':
           default:
@@ -270,7 +294,7 @@ export class Quantum2DPeriodicEngine
       time: this.time,
       systemLabel: '2D torus',
       boundaryCondition: 'periodic',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity,
       width: this.config.size,
       height: this.config.size,
@@ -296,7 +320,7 @@ function buildModeFrequencies2D(
     for (let kx = 0; kx < size; kx += 1) {
       const sinX = Math.sin((Math.PI * kx) / size);
       frequencies[flattenIndex2D(kx, ky, size)] =
-        (2 * waveSpeed * Math.sqrt((sinX * sinX) + (sinY * sinY))) / spacing;
+        (2 * waveSpeed * Math.sqrt(sinX * sinX + sinY * sinY)) / spacing;
     }
   }
 
@@ -307,11 +331,12 @@ function assertValidConfig(config: Quantum2DPeriodicConfig): void {
     throw new Error('size must be an integer greater than or equal to 8.');
   }
 
-  if (config.domainLength <= 0 || config.waveSpeed <= 0) {
-    throw new Error('domainLength and waveSpeed must be positive.');
-  }
-
-  if (config.gaussianWidth <= 0 || config.momentumWidth <= 0) {
-    throw new Error('gaussianWidth and momentumWidth must be positive.');
-  }
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertPositiveFinite(config.momentumWidth, 'momentumWidth');
+  assertUnitInterval(config.initialCenterX, 'initialCenterX');
+  assertUnitInterval(config.initialCenterY, 'initialCenterY');
+  assertIntegerInRange(config.modeNumberX, 'modeNumberX', 0, config.size - 1);
+  assertIntegerInRange(config.modeNumberY, 'modeNumberY', 0, config.size - 1);
 }

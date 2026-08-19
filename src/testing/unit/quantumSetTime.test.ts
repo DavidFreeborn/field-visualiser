@@ -15,6 +15,7 @@ const periodicConfig: Quantum1DPeriodicConfig = {
   gaussianWidth: 0.08,
   momentumWidth: 2,
   modeNumber: 4,
+  modeNumbers: [1],
   initialPreset: 'gaussian-wavepacket',
 };
 
@@ -26,6 +27,7 @@ const fixedConfig: Quantum1DFixedConfig = {
   gaussianWidth: 0.08,
   momentumWidth: 2,
   modeNumber: 4,
+  modeNumbers: [1],
   initialPreset: 'gaussian-wavepacket',
 };
 
@@ -54,7 +56,10 @@ describe('Quantum1DPeriodicEngine.setTime', () => {
     const directSnapshot = direct.getSnapshot();
 
     expect(
-      maxAbsoluteDifference(sequentialSnapshot.amplitudeReal, directSnapshot.amplitudeReal),
+      maxAbsoluteDifference(
+        sequentialSnapshot.amplitudeReal,
+        directSnapshot.amplitudeReal,
+      ),
     ).toBeLessThan(COMPOSITION_TOLERANCE);
     expect(
       maxAbsoluteDifference(
@@ -81,7 +86,10 @@ describe('Quantum1DPeriodicEngine.setTime', () => {
     // step() accumulates absolute time in floating point, so allow slightly
     // more slack than the pure composition test.
     expect(
-      maxAbsoluteDifference(steppedSnapshot.amplitudeReal, directSnapshot.amplitudeReal),
+      maxAbsoluteDifference(
+        steppedSnapshot.amplitudeReal,
+        directSnapshot.amplitudeReal,
+      ),
     ).toBeLessThan(1e-9);
   });
 
@@ -145,7 +153,10 @@ describe('Quantum1DFixedEngine.setTime', () => {
     const directSnapshot = direct.getSnapshot();
 
     expect(
-      maxAbsoluteDifference(sequentialSnapshot.amplitudeReal, directSnapshot.amplitudeReal),
+      maxAbsoluteDifference(
+        sequentialSnapshot.amplitudeReal,
+        directSnapshot.amplitudeReal,
+      ),
     ).toBeLessThan(COMPOSITION_TOLERANCE);
     expect(
       maxAbsoluteDifference(

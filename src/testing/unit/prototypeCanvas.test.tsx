@@ -189,7 +189,7 @@ describe('PrototypeCanvas', () => {
       time: 0,
       systemLabel: '2D torus',
       boundaryCondition: 'periodic',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity: 'probability-density',
       width: 4,
       height: 4,
@@ -218,7 +218,10 @@ describe('PrototypeCanvas', () => {
       ...quantumSnapshot,
       time: 0.1,
       quantity: 'magnitude',
-      displayValues: Float32Array.from({ length: 16 }, (_, index) => index / 16),
+      displayValues: Float32Array.from(
+        { length: 16 },
+        (_, index) => index / 16,
+      ),
     };
 
     rerender(
@@ -265,7 +268,9 @@ describe('PrototypeCanvas', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent(/renderer failed to load/i);
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /renderer failed to load/i,
+      );
     });
 
     await user.click(screen.getByRole('button', { name: /retry renderer/i }));
@@ -277,7 +282,9 @@ describe('PrototypeCanvas', () => {
 
     expect(constructorSpy).toHaveBeenCalledTimes(2);
     expect(destroySpy).toHaveBeenCalledTimes(1);
-    expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+    expect(
+      document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]'),
+    ).toHaveLength(1);
   });
 
   it('passes the fixed circular geometry mode through to the renderer', async () => {
@@ -323,11 +330,15 @@ describe('PrototypeCanvas', () => {
     );
 
     await waitFor(() => {
-      expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+      expect(
+        document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]'),
+      ).toHaveLength(1);
     });
 
     firstRender.unmount();
-    expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(0);
+    expect(
+      document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]'),
+    ).toHaveLength(0);
 
     render(
       <PrototypeCanvas
@@ -339,7 +350,9 @@ describe('PrototypeCanvas', () => {
     );
 
     await waitFor(() => {
-      expect(document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]')).toHaveLength(1);
+      expect(
+        document.querySelectorAll('canvas[data-testid="mock-renderer-canvas"]'),
+      ).toHaveLength(1);
     });
   });
 });

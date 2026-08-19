@@ -9,7 +9,6 @@ import {
   Quantum2DPeriodicEngine,
   type Quantum2DPeriodicConfig,
 } from '../../physics/quantum/quantum2dPeriodic';
-import type { Quantum2DInitialPreset } from '../../physics/quantum/initialStates2d';
 import {
   createFrameChannel,
   DIAGNOSTICS_UPDATE_INTERVAL_SECONDS,
@@ -64,8 +63,12 @@ export function useQuantum2DPrototype(
   geometry: Quantum2DGeometry,
   active = true,
 ): Quantum2DControllerState {
-  const [config, setConfig] = useState<Quantum2DConfig>(getDefaultConfig(geometry));
-  const [quantity, setQuantity] = useState<Quantum2DQuantity>('probability-density');
+  const [config, setConfig] = useState<Quantum2DConfig>(
+    getDefaultConfig(geometry),
+  );
+  const [quantity, setQuantity] = useState<Quantum2DQuantity>(
+    'probability-density',
+  );
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [showLattice, setShowLattice] = useState(false);
@@ -93,7 +96,9 @@ export function useQuantum2DPrototype(
   const lastSentQuantityRef = useRef<Quantum2DQuantity | null>(null);
   // Ping-pong display buffers for the local (no-Worker) fallback path, so
   // steady playback does not allocate a Float32Array per frame.
-  const localDisplayBuffersRef = useRef<[Float32Array, Float32Array] | null>(null);
+  const localDisplayBuffersRef = useRef<[Float32Array, Float32Array] | null>(
+    null,
+  );
   const localDisplayParityRef = useRef(0);
   const rateTrackerRef = useRef(new PlaybackRateTracker());
   const channelRef = useRef<FrameChannel<Quantum2DSnapshot> | null>(null);
@@ -107,8 +112,12 @@ export function useQuantum2DPrototype(
     localEngineRef.current.getDiagnostics(),
   );
   const [displayTime, setDisplayTime] = useState(0);
-  const [achievedSpeedRatio, setAchievedSpeedRatio] = useState<number | null>(null);
-  const [fieldStats, setFieldStats] = useState<Quantum2DFieldStats | null>(null);
+  const [achievedSpeedRatio, setAchievedSpeedRatio] = useState<number | null>(
+    null,
+  );
+  const [fieldStats, setFieldStats] = useState<Quantum2DFieldStats | null>(
+    null,
+  );
   const diagnosticsRef = useRef(diagnostics);
   diagnosticsRef.current = diagnostics;
 
@@ -118,20 +127,41 @@ export function useQuantum2DPrototype(
 
   useEffect(() => {
     const nextConfig = getDefaultConfig(geometry);
-    setConfig((currentConfig) => ({
-      ...nextConfig,
-      initialPreset: sanitizePreset(currentConfig.initialPreset, geometry),
-      size: currentConfig.size,
-      waveSpeed: currentConfig.waveSpeed,
-      domainLength: currentConfig.domainLength,
-      initialCenterX: currentConfig.initialCenterX,
-      initialCenterY: currentConfig.initialCenterY,
-      gaussianWidth: currentConfig.gaussianWidth,
-      momentumWidth: currentConfig.momentumWidth,
-      modeNumberX: currentConfig.modeNumberX,
-      modeNumberY: currentConfig.modeNumberY,
-    }));
+    setConfig((currentConfig) =>
+      sanitizeConfigForGeometry(
+        {
+          ...nextConfig,
+          initialPreset: currentConfig.initialPreset,
+          size: currentConfig.size,
+          waveSpeed: currentConfig.waveSpeed,
+          domainLength: currentConfig.domainLength,
+          initialCenterX: currentConfig.initialCenterX,
+          initialCenterY: currentConfig.initialCenterY,
+          gaussianWidth: currentConfig.gaussianWidth,
+          momentumWidth: currentConfig.momentumWidth,
+          modeNumberX: currentConfig.modeNumberX,
+          modeNumberY: currentConfig.modeNumberY,
+        },
+        geometry,
+      ),
+    );
   }, [geometry]);
+
+  // Builds a fresh time-zero frame locally so a reset or reconfiguration is
+  // visible immediately, without waiting a worker round trip that could leave
+  // a stale pre-reset frame on screen.
+  const publishLocalTimeZeroFrame = useEffectEvent(() => {
+    const engine =
+      geometryRef.current === 'square-fixed'
+        ? new Quantum2DFixedEngine(configRef.current as Quantum2DFixedConfig)
+        : new Quantum2DPeriodicEngine(
+            configRef.current as Quantum2DPeriodicConfig,
+          );
+    const freshSnapshot = engine.getDisplaySnapshot(quantityRef.current);
+    setSnapshot(freshSnapshot);
+    frameChannel.publish(freshSnapshot);
+    setDiagnostics(engine.getDiagnostics());
+  });
 
   const fallbackToLocalMode = useEffectEvent(() => {
     workerRef.current?.terminate();
@@ -142,9 +172,13 @@ export function useQuantum2DPrototype(
     localEngineRef.current =
       geometryRef.current === 'square-fixed'
         ? new Quantum2DFixedEngine(configRef.current as Quantum2DFixedConfig)
-        : new Quantum2DPeriodicEngine(configRef.current as Quantum2DPeriodicConfig);
+        : new Quantum2DPeriodicEngine(
+            configRef.current as Quantum2DPeriodicConfig,
+          );
     localEngineRef.current.setTime(desiredTimeRef.current);
-    const freshSnapshot = localEngineRef.current.getDisplaySnapshot(quantityRef.current);
+    const freshSnapshot = localEngineRef.current.getDisplaySnapshot(
+      quantityRef.current,
+    );
     setSnapshot(freshSnapshot);
     frameChannel.publish(freshSnapshot);
     setDiagnostics(localEngineRef.current.getDiagnostics());
@@ -193,7 +227,9 @@ export function useQuantum2DPrototype(
         forceNextStateUpdateRef.current = false;
         const windowMs = nowMs - lastDiagnosticsWallMsRef.current;
         const updatesPerSecond =
-          windowMs > 0 && windowMs < 10_000 ? (replyCountRef.current * 1000) / windowMs : null;
+          windowMs > 0 && windowMs < 10_000
+            ? (replyCountRef.current * 1000) / windowMs
+            : null;
         replyCountRef.current = 0;
         lastDiagnosticsWallMsRef.current = nowMs;
         // Note: React only keeps this snapshot for low-frequency UI reads of
@@ -205,7 +241,10 @@ export function useQuantum2DPrototype(
         setAchievedSpeedRatio(rateTrackerRef.current.sampleAndReset());
         setFieldStats({
           updatesPerSecond,
-          lagSeconds: Math.max(0, desiredTimeRef.current - response.snapshot.time),
+          lagSeconds: Math.max(
+            0,
+            desiredTimeRef.current - response.snapshot.time,
+          ),
           computeMs: response.timings.computeMs,
           snapshotMs: response.timings.snapshotMs,
         });
@@ -224,9 +263,12 @@ export function useQuantum2DPrototype(
     let disposed = false;
 
     try {
-      const worker = new Worker(new URL('../workers/quantum2D.worker.ts', import.meta.url), {
-        type: 'module',
-      });
+      const worker = new Worker(
+        new URL('../workers/quantum2D.worker.ts', import.meta.url),
+        {
+          type: 'module',
+        },
+      );
       workerRef.current = worker;
       schedulerRef.current = new Quantum2DWorkerScheduler(worker);
 
@@ -236,7 +278,11 @@ export function useQuantum2DPrototype(
         }
 
         if (event.data.type === 'error') {
-          fallbackToLocalMode();
+          // A stale error from a pre-reset generation must not tear down the
+          // (healthy) worker for the current configuration.
+          if (schedulerRef.current?.isCurrent(event.data.generation) === true) {
+            fallbackToLocalMode();
+          }
           return;
         }
 
@@ -287,9 +333,15 @@ export function useQuantum2DPrototype(
     forceNextStateUpdateRef.current = true;
     lastSentQuantityRef.current = quantityRef.current;
     scheduler.configure(geometry, config, quantityRef.current);
+    // Publish a fresh local time-zero frame right away: the canvas must not
+    // keep showing pre-reconfiguration physics while the worker catches up.
+    publishLocalTimeZeroFrame();
     setDisplayTime(0);
     setAchievedSpeedRatio(null);
     setFieldStats(null);
+    // publishLocalTimeZeroFrame is an effect event and must not be a
+    // dependency (it would retrigger this effect on every render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, executionMode, geometry]);
 
   useEffect(() => {
@@ -302,7 +354,9 @@ export function useQuantum2DPrototype(
         ? new Quantum2DFixedEngine(config as Quantum2DFixedConfig)
         : new Quantum2DPeriodicEngine(config as Quantum2DPeriodicConfig);
     desiredTimeRef.current = 0;
-    const freshSnapshot = localEngineRef.current.getDisplaySnapshot(quantityRef.current);
+    const freshSnapshot = localEngineRef.current.getDisplaySnapshot(
+      quantityRef.current,
+    );
     setSnapshot(freshSnapshot);
     frameChannel.publish(freshSnapshot);
     setDiagnostics(localEngineRef.current.getDiagnostics());
@@ -313,7 +367,10 @@ export function useQuantum2DPrototype(
     if (executionMode === 'worker') {
       // Skip the redundant round trip when the quantity already matches what
       // the last configure carried (e.g. on mount).
-      if (schedulerRef.current !== null && lastSentQuantityRef.current !== quantity) {
+      if (
+        schedulerRef.current !== null &&
+        lastSentQuantityRef.current !== quantity
+      ) {
         lastSentQuantityRef.current = quantity;
         forceNextStateUpdateRef.current = true;
         schedulerRef.current.setQuantity(quantity);
@@ -382,7 +439,10 @@ export function useQuantum2DPrototype(
               localDisplayBuffersRef.current[localDisplayParityRef.current],
             ),
           );
-          rateTrackerRef.current.addFrame(elapsedSeconds, elapsedSeconds * speed);
+          rateTrackerRef.current.addFrame(
+            elapsedSeconds,
+            elapsedSeconds * speed,
+          );
 
           diagnosticsElapsed += elapsedSeconds;
           if (diagnosticsElapsed >= DIAGNOSTICS_UPDATE_INTERVAL_SECONDS) {
@@ -427,11 +487,14 @@ export function useQuantum2DPrototype(
       setFieldStats(null);
 
       if (executionMode === 'worker' && schedulerRef.current !== null) {
-        // configure() bumps the generation, invalidating pending work.
+        // configure() bumps the generation, invalidating pending work; the
+        // local time-zero frame below makes the reset visible immediately, so
+        // no stale worker frame can sit on screen during the round trip.
         previousWorkerSnapshotRef.current = null;
         forceNextStateUpdateRef.current = true;
         lastSentQuantityRef.current = quantityRef.current;
         schedulerRef.current.configure(geometry, config, quantityRef.current);
+        publishLocalTimeZeroFrame();
         setDisplayTime(0);
         setAchievedSpeedRatio(null);
         return;
@@ -469,16 +532,48 @@ export function useQuantum2DPrototype(
 }
 
 function getDefaultConfig(geometry: Quantum2DGeometry): Quantum2DConfig {
-  return geometry === 'square-fixed' ? defaultQuantum2DSquareConfig : defaultQuantum2DTorusConfig;
+  return geometry === 'square-fixed'
+    ? defaultQuantum2DSquareConfig
+    : defaultQuantum2DTorusConfig;
 }
 
-function sanitizePreset(
-  preset: Quantum2DInitialPreset,
+/**
+ * Adjusts a config carried across a geometry switch so it stays valid for the
+ * destination topology: the split preset does not exist on the fixed square,
+ * square normal modes need components in 1 .. size-2, and a periodic split
+ * needs a distinct +kx branch.
+ */
+function sanitizeConfigForGeometry(
+  config: Quantum2DConfig,
   geometry: Quantum2DGeometry,
-): Quantum2DInitialPreset {
-  if (geometry === 'square-fixed' && preset === 'split-superposition') {
-    return 'selected-normal-mode';
+): Quantum2DConfig {
+  const periodic = geometry === 'torus-periodic';
+  let initialPreset = config.initialPreset;
+
+  if (!periodic && initialPreset === 'split-superposition') {
+    initialPreset = 'selected-normal-mode';
   }
 
-  return preset;
+  const minimumMode =
+    !periodic && initialPreset === 'selected-normal-mode' ? 1 : 0;
+  const maximumMode = periodic ? config.size - 1 : config.size - 2;
+  let modeNumberX = Math.min(
+    Math.max(config.modeNumberX, minimumMode),
+    maximumMode,
+  );
+  const modeNumberY = Math.min(
+    Math.max(config.modeNumberY, minimumMode),
+    maximumMode,
+  );
+
+  if (
+    periodic &&
+    initialPreset === 'split-superposition' &&
+    (modeNumberX === 0 ||
+      (config.size % 2 === 0 && modeNumberX === config.size / 2))
+  ) {
+    modeNumberX = 1;
+  }
+
+  return { ...config, initialPreset, modeNumberX, modeNumberY };
 }

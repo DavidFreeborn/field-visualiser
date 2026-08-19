@@ -1,14 +1,46 @@
 import { flattenIndex2D, assertSquareResolution } from '../core/grids';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
+import {
+  assertFiniteNumber,
+  assertPositiveFinite,
+  computeRelativeEnergyDrift,
+  computeSubstepCount,
+} from '../core/validation';
 
 export type Classical2DGeometry = 'square-fixed' | 'torus-periodic';
 export type Classical2DInitialPreset =
   | 'central-gaussian-displacement'
   | 'central-gaussian-velocity'
+  | 'zero-mean-gaussian-velocity'
   | 'square-standing-mode-1-1'
   | 'wraparound-pulse'
   | 'compact-pulse';
-export type Classical2DQuantity = 'displacement' | 'velocity' | 'energy-density';
+export type Classical2DQuantity =
+  | 'displacement'
+  | 'velocity'
+  | 'energy-density';
+
+/** The uniform (zero) mode only exists on the periodic torus, and a globally
+ * mean-subtracted state conflicts with pinned edges, so the zero-mean preset
+ * is torus-only. The wraparound pulse is likewise a periodic-topology preset. */
+export const CLASSICAL_2D_TORUS_PRESETS: readonly Classical2DInitialPreset[] = [
+  'central-gaussian-displacement',
+  'central-gaussian-velocity',
+  'zero-mean-gaussian-velocity',
+  'wraparound-pulse',
+  'compact-pulse',
+];
+
+export const CLASSICAL_2D_SQUARE_PRESETS: readonly Classical2DInitialPreset[] =
+  [
+    'central-gaussian-displacement',
+    'central-gaussian-velocity',
+    'square-standing-mode-1-1',
+    'compact-pulse',
+  ];
 
 export interface Classical2DConfig {
   readonly geometry: Classical2DGeometry;
@@ -47,9 +79,11 @@ export interface Classical2DDiagnostics extends SimulationDiagnostics {
 
 const STABILITY_SAFETY_FACTOR = 0.2;
 
-export class Classical2DEngine
-  implements SimulationEngine<Classical2DConfig, Classical2DSnapshot, Classical2DDiagnostics>
-{
+export class Classical2DEngine implements SimulationEngine<
+  Classical2DConfig,
+  Classical2DSnapshot,
+  Classical2DDiagnostics
+> {
   private config: Classical2DConfig | null = null;
   private time = 0;
   private spacing = 1;
@@ -68,7 +102,9 @@ export class Classical2DEngine
 
     this.config = config;
     this.time = 0;
-    this.spacing = config.domainLength / (config.geometry === 'square-fixed' ? config.size - 1 : config.size);
+    this.spacing =
+      config.domainLength /
+      (config.geometry === 'square-fixed' ? config.size - 1 : config.size);
     this.inverseSpacingSquared = 1 / (this.spacing * this.spacing);
     const siteCount = config.size * config.size;
     this.displacement = new Float64Array(siteCount);
@@ -86,12 +122,16 @@ export class Classical2DEngine
   }
 
   public step(dt: number): void {
-    if (dt <= 0) {
+    if (this.config === null) {
+      throw new Error('Engine has not been initialised.');
+    }
+
+    const substeps = computeSubstepCount(dt, this.getMaxStableDt() * 0.95);
+
+    if (substeps === 0) {
       return;
     }
 
-    const maxStableDt = this.getMaxStableDt();
-    const substeps = Math.max(1, Math.ceil(dt / (maxStableDt * 0.95)));
     const substepDt = dt / substeps;
 
     for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
@@ -100,7 +140,9 @@ export class Classical2DEngine
     }
   }
 
-  public getSnapshot(quantity: Classical2DQuantity = 'displacement'): Classical2DSnapshot {
+  public getSnapshot(
+    quantity: Classical2DQuantity = 'displacement',
+  ): Classical2DSnapshot {
     if (this.config === null) {
       throw new Error('Engine has not been initialised.');
     }
@@ -110,8 +152,10 @@ export class Classical2DEngine
     return {
       kind: 'classical-2d',
       time: this.time,
-      systemLabel: this.config.geometry === 'square-fixed' ? '2D square' : '2D torus',
-      boundaryCondition: this.config.geometry === 'square-fixed' ? 'dirichlet' : 'periodic',
+      systemLabel:
+        this.config.geometry === 'square-fixed' ? '2D square' : '2D torus',
+      boundaryCondition:
+        this.config.geometry === 'square-fixed' ? 'dirichlet' : 'periodic',
       modeLabel: 'classical field',
       quantity,
       width: this.config.size,
@@ -138,7 +182,10 @@ export class Classical2DEngine
       recommendedDt,
       stabilityRatio: recommendedDt / maxStableDt,
       totalEnergy,
-      relativeEnergyDrift: Math.abs(totalEnergy - this.energyBaseline) / this.energyBaseline,
+      relativeEnergyDrift: computeRelativeEnergyDrift(
+        this.energyBaseline,
+        totalEnergy,
+      ),
     };
   }
 
@@ -278,17 +325,47 @@ function createInitialState(
   displacement: Float64Array,
   velocity: Float64Array,
 ): void {
-  const center = config.geometry === 'torus-periodic' && config.initialPreset === 'wraparound-pulse'
-    ? 0.08
-    : 0.5;
+  const periodic = config.geometry === 'torus-periodic';
+  const center =
+    periodic && config.initialPreset === 'wraparound-pulse' ? 0.08 : 0.5;
 
   switch (config.initialPreset) {
     case 'central-gaussian-displacement':
     case 'wraparound-pulse':
-      fillGaussian2D(displacement, config.size, center, center, config.gaussianWidth, config.amplitude);
+      fillGaussian2D(
+        displacement,
+        config.size,
+        center,
+        center,
+        config.gaussianWidth,
+        config.amplitude,
+        periodic,
+      );
       break;
     case 'central-gaussian-velocity':
-      fillGaussian2D(velocity, config.size, 0.5, 0.5, config.gaussianWidth, config.amplitude);
+      fillGaussian2D(
+        velocity,
+        config.size,
+        0.5,
+        0.5,
+        config.gaussianWidth,
+        config.amplitude,
+        periodic,
+      );
+      break;
+    case 'zero-mean-gaussian-velocity':
+      // Torus only: subtracting the exact discrete mean leaves the periodic
+      // uniform (zero-frequency) mode exactly unexcited.
+      fillGaussian2D(
+        velocity,
+        config.size,
+        0.5,
+        0.5,
+        config.gaussianWidth,
+        config.amplitude,
+        periodic,
+      );
+      subtractMean(velocity);
       break;
     case 'square-standing-mode-1-1':
       fillStandingModeSquare(displacement, config.size, 1, 1, config.amplitude);
@@ -306,20 +383,48 @@ function fillGaussian2D(
   centerY: number,
   width: number,
   amplitude: number,
+  periodic: boolean,
 ): void {
+  // Periodic torus: sites sample x/size and displacement wraps through the
+  // seam. Fixed square: full coordinate grid x/(size-1), ordinary distance.
+  const denominator = periodic ? size : size - 1;
+
   for (let y = 0; y < size; y += 1) {
-    const normalizedY = y / (size - 1);
+    const normalizedY = y / denominator;
+    const deltaY = periodic
+      ? shortestPeriodicDelta(normalizedY, centerY)
+      : normalizedY - centerY;
     for (let x = 0; x < size; x += 1) {
-      const normalizedX = x / (size - 1);
-      const deltaX = centerX - normalizedX;
-      const deltaY = centerY - normalizedY;
+      const normalizedX = x / denominator;
+      const deltaX = periodic
+        ? shortestPeriodicDelta(normalizedX, centerX)
+        : normalizedX - centerX;
       target[flattenIndex2D(x, y, size)] =
-        amplitude * Math.exp(-0.5 * ((deltaX * deltaX + deltaY * deltaY) / (width * width)));
+        amplitude *
+        Math.exp(
+          -0.5 * ((deltaX * deltaX + deltaY * deltaY) / (width * width)),
+        );
     }
   }
 }
 
-function fillCompactPulse2D(target: Float64Array, size: number, amplitude: number): void {
+function shortestPeriodicDelta(position: number, center: number): number {
+  const rawDelta = position - center;
+  return rawDelta - Math.round(rawDelta);
+}
+
+function subtractMean(values: Float64Array): void {
+  let total = 0;
+  for (const value of values) total += value;
+  const mean = total / values.length;
+  for (let index = 0; index < values.length; index += 1) values[index] -= mean;
+}
+
+function fillCompactPulse2D(
+  target: Float64Array,
+  size: number,
+  amplitude: number,
+): void {
   const center = (size - 1) / 2;
   const radius = size * 0.08;
   for (let y = 0; y < size; y += 1) {
@@ -391,11 +496,14 @@ function computeEnergy2D(
       const index = flattenIndex2D(x, y, size);
 
       if (geometry === 'torus-periodic' || x < size - 1) {
-        const neighborX = geometry === 'torus-periodic' ? (x + 1) % size : x + 1;
+        const neighborX =
+          geometry === 'torus-periodic' ? (x + 1) % size : x + 1;
         if (neighborX < size) {
           const rightIndex = flattenIndex2D(neighborX, y, size);
-          const slopeX = (displacement[rightIndex] - displacement[index]) / spacing;
-          const potentialDensityX = 0.5 * waveSpeed * waveSpeed * slopeX * slopeX;
+          const slopeX =
+            (displacement[rightIndex] - displacement[index]) / spacing;
+          const potentialDensityX =
+            0.5 * waveSpeed * waveSpeed * slopeX * slopeX;
           potential += potentialDensityX * cellArea;
           localDensity[index] += 0.5 * potentialDensityX;
           localDensity[rightIndex] += 0.5 * potentialDensityX;
@@ -403,11 +511,14 @@ function computeEnergy2D(
       }
 
       if (geometry === 'torus-periodic' || y < size - 1) {
-        const neighborY = geometry === 'torus-periodic' ? (y + 1) % size : y + 1;
+        const neighborY =
+          geometry === 'torus-periodic' ? (y + 1) % size : y + 1;
         if (neighborY < size) {
           const downIndex = flattenIndex2D(x, neighborY, size);
-          const slopeY = (displacement[downIndex] - displacement[index]) / spacing;
-          const potentialDensityY = 0.5 * waveSpeed * waveSpeed * slopeY * slopeY;
+          const slopeY =
+            (displacement[downIndex] - displacement[index]) / spacing;
+          const potentialDensityY =
+            0.5 * waveSpeed * waveSpeed * slopeY * slopeY;
           potential += potentialDensityY * cellArea;
           localDensity[index] += 0.5 * potentialDensityY;
           localDensity[downIndex] += 0.5 * potentialDensityY;
@@ -426,7 +537,20 @@ function computeEnergy2D(
 
 function assertValidConfig(config: Classical2DConfig): void {
   assertSquareResolution(config.size);
-  if (config.domainLength <= 0 || config.waveSpeed <= 0 || config.gaussianWidth <= 0) {
-    throw new Error('domainLength, waveSpeed, and gaussianWidth must be positive.');
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertFiniteNumber(config.amplitude, 'amplitude');
+
+  const validPresets =
+    config.geometry === 'torus-periodic'
+      ? CLASSICAL_2D_TORUS_PRESETS
+      : CLASSICAL_2D_SQUARE_PRESETS;
+
+  if (!validPresets.includes(config.initialPreset)) {
+    throw new Error(
+      `initialPreset '${String(config.initialPreset)}' is not valid for geometry ` +
+        `'${config.geometry}'.`,
+    );
   }
 }

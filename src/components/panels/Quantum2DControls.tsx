@@ -68,14 +68,24 @@ export function Quantum2DControls({
           'selected-normal-mode',
           'split-superposition',
         ]
-      : [
-          'site-localized',
-          'gaussian-wavepacket',
-          'selected-normal-mode',
-        ];
+      : ['site-localized', 'gaussian-wavepacket', 'selected-normal-mode'];
   const resolutionOptions =
-    geometry === 'torus-periodic' ? torusResolutionOptions : squareResolutionOptions;
-  const modeSliderMin = geometry === 'torus-periodic' ? 0 : 1;
+    geometry === 'torus-periodic'
+      ? torusResolutionOptions
+      : squareResolutionOptions;
+  // A split superposition needs distinct +kx/-kx branches, so kx >= 1 (ky = 0
+  // stays valid); square normal modes need both components >= 1.
+  const modeSliderMinX =
+    config.initialPreset === 'split-superposition' ||
+    (geometry === 'square-fixed' &&
+      config.initialPreset === 'selected-normal-mode')
+      ? 1
+      : 0;
+  const modeSliderMinY =
+    geometry === 'square-fixed' &&
+    config.initialPreset === 'selected-normal-mode'
+      ? 1
+      : 0;
 
   return (
     <section className="control-panel">
@@ -88,10 +98,7 @@ export function Quantum2DControls({
       </div>
 
       <div className="control-grid">
-        <ModeSwitch
-          mode={mode}
-          onModeChange={onModeChange}
-        />
+        <ModeSwitch mode={mode} onModeChange={onModeChange} />
         <GeometrySwitch
           geometry={geometry}
           mode={mode}
@@ -101,18 +108,34 @@ export function Quantum2DControls({
           <span>Initial state</span>
           <select
             value={config.initialPreset}
-            onChange={(event) =>
+            onChange={(event) => {
+              const nextPreset = event.target.value as Quantum2DInitialPreset;
+              // Adjust an existing invalid mode before it reaches the engine:
+              // a split needs distinct +kx/-kx branches (kx != 0), and square
+              // normal modes need both components >= 1.
+              const needsNonZeroX =
+                nextPreset === 'split-superposition' ||
+                (geometry === 'square-fixed' &&
+                  nextPreset === 'selected-normal-mode');
+              const needsNonZeroY =
+                geometry === 'square-fixed' &&
+                nextPreset === 'selected-normal-mode';
               onConfigChange({
                 ...config,
-                initialPreset: event.target.value as Quantum2DInitialPreset,
-              })
-            }
+                initialPreset: nextPreset,
+                modeNumberX:
+                  needsNonZeroX && config.modeNumberX === 0
+                    ? 1
+                    : config.modeNumberX,
+                modeNumberY:
+                  needsNonZeroY && config.modeNumberY === 0
+                    ? 1
+                    : config.modeNumberY,
+              });
+            }}
           >
             {allowedPresets.map((preset) => (
-              <option
-                key={preset}
-                value={preset}
-              >
+              <option key={preset} value={preset}>
                 {initialPresetLabels[preset]}
               </option>
             ))}
@@ -130,10 +153,7 @@ export function Quantum2DControls({
             }
           >
             {resolutionOptions.map((size) => (
-              <option
-                key={size}
-                value={size}
-              >
+              <option key={size} value={size}>
                 {`${size} × ${size}`}
               </option>
             ))}
@@ -143,13 +163,17 @@ export function Quantum2DControls({
           <span>Displayed quantity</span>
           <select
             value={quantity}
-            onChange={(event) => onQuantityChange(event.target.value as Quantum2DQuantity)}
+            onChange={(event) =>
+              onQuantityChange(event.target.value as Quantum2DQuantity)
+            }
           >
             <option value="probability-density">Site probability |ψᵢ|²</option>
             <option value="magnitude">Magnitude |ψ|</option>
             <option value="real-part">Real part</option>
             <option value="imaginary-part">Imaginary part</option>
-            <option value="phase-magnitude">Complex amplitude (phase + magnitude)</option>
+            <option value="phase-magnitude">
+              Complex amplitude (phase + magnitude)
+            </option>
           </select>
         </label>
         <label>
@@ -157,7 +181,7 @@ export function Quantum2DControls({
           <input
             aria-label="Mode x"
             max={6}
-            min={modeSliderMin}
+            min={modeSliderMinX}
             step={1}
             type="range"
             value={config.modeNumberX}
@@ -174,7 +198,7 @@ export function Quantum2DControls({
           <input
             aria-label="Mode y"
             max={6}
-            min={modeSliderMin}
+            min={modeSliderMinY}
             step={1}
             type="range"
             value={config.modeNumberY}
@@ -219,18 +243,10 @@ export function Quantum2DControls({
         >
           {playing ? 'Pause' : 'Play'}
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onStep}
-        >
+        <button className="secondary-button" type="button" onClick={onStep}>
           Single step
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={onReset}
-        >
+        <button className="secondary-button" type="button" onClick={onReset}>
           Reset
         </button>
       </div>

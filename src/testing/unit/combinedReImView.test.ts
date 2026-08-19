@@ -10,15 +10,22 @@ function makeQuantumSnapshot(
   siteCount: number,
   realAmplitude: number,
   imaginaryAmplitude: number,
-  spikes?: { realIndex?: number; realValue?: number; imagIndex?: number; imagValue?: number },
+  spikes?: {
+    realIndex?: number;
+    realValue?: number;
+    imagIndex?: number;
+    imagValue?: number;
+  },
 ): Quantum1DPeriodicSnapshot {
   const amplitudeReal = new Float64Array(siteCount);
   const amplitudeImaginary = new Float64Array(siteCount);
   const magnitude = new Float64Array(siteCount);
   const probabilityDensity = new Float64Array(siteCount);
   for (let index = 0; index < siteCount; index += 1) {
-    amplitudeReal[index] = realAmplitude * Math.cos((2 * Math.PI * index) / siteCount);
-    amplitudeImaginary[index] = imaginaryAmplitude * Math.sin((2 * Math.PI * index) / siteCount);
+    amplitudeReal[index] =
+      realAmplitude * Math.cos((2 * Math.PI * index) / siteCount);
+    amplitudeImaginary[index] =
+      imaginaryAmplitude * Math.sin((2 * Math.PI * index) / siteCount);
   }
   if (spikes?.realIndex !== undefined) {
     amplitudeReal[spikes.realIndex] = spikes.realValue ?? 1;
@@ -38,7 +45,7 @@ function makeQuantumSnapshot(
     time: 0,
     systemLabel: '1D circle',
     boundaryCondition: 'periodic',
-    modeLabel: 'free-field one-particle',
+    modeLabel: 'square-root lattice quantum model',
     quantity: 'real-imaginary-parts',
     siteCount,
     domainLength: 1,
@@ -61,7 +68,9 @@ const ringOptions = {
 
 describe('combined Re/Im view rendering', () => {
   it('uses one shared symmetric scale from max(|Re|, |Im|)', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
     // Im dominates: the shared scale must come from the imaginary channel.
     const info = renderer.renderScene(
@@ -77,7 +86,9 @@ describe('combined Re/Im view rendering', () => {
   });
 
   it('fixed scaling does not shrink when either channel falls in amplitude', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
     const first = renderer.renderScene(
       makeQuantumSnapshot(128, 0.4, 0.9),
@@ -98,9 +109,16 @@ describe('combined Re/Im view rendering', () => {
   });
 
   it('renders both channels (one trace per channel, unlike the single-part views)', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
-    renderer.renderScene(makeQuantumSnapshot(128, 0.5, 0.5), ringOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makeQuantumSnapshot(128, 0.5, 0.5),
+      ringOptions,
+      WIDTH,
+      HEIGHT,
+    );
     const combinedCount = renderer.getPrimitiveInstructionCount();
 
     renderer.renderScene(
@@ -116,12 +134,24 @@ describe('combined Re/Im view rendering', () => {
   });
 
   it('bounds the rendered primitive count at 2048 sites', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
-    renderer.renderScene(makeQuantumSnapshot(2048, 0.5, 0.5), ringOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makeQuantumSnapshot(2048, 0.5, 0.5),
+      ringOptions,
+      WIDTH,
+      HEIGHT,
+    );
     const countAt2048 = renderer.getPrimitiveInstructionCount();
 
-    renderer.renderScene(makeQuantumSnapshot(4096, 0.5, 0.5), ringOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makeQuantumSnapshot(4096, 0.5, 0.5),
+      ringOptions,
+      WIDTH,
+      HEIGHT,
+    );
     const countAt4096 = renderer.getPrimitiveInstructionCount();
 
     // Envelope fills + two trace strokes: a small constant, not O(sites).
@@ -131,20 +161,34 @@ describe('combined Re/Im view rendering', () => {
   });
 
   it('keeps guide geometry constant over many combined-ring frames', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
 
-    renderer.renderScene(makeQuantumSnapshot(512, 0.5, 0.5), ringOptions, WIDTH, HEIGHT);
+    renderer.renderScene(
+      makeQuantumSnapshot(512, 0.5, 0.5),
+      ringOptions,
+      WIDTH,
+      HEIGHT,
+    );
     const initial = renderer.getGuideInstructionCount();
     expect(initial).toBeGreaterThan(0);
     for (let frame = 0; frame < 500; frame += 1) {
-      renderer.renderScene(makeQuantumSnapshot(512, 0.5, 0.5), ringOptions, WIDTH, HEIGHT);
+      renderer.renderScene(
+        makeQuantumSnapshot(512, 0.5, 0.5),
+        ringOptions,
+        WIDTH,
+        HEIGHT,
+      );
     }
     expect(renderer.getGuideInstructionCount()).toBe(initial);
     renderer.destroy();
   });
 
   it('renders the combined view on the unwrapped plot for the fixed-end interval', () => {
-    const renderer = new PeriodicClassicalFieldRenderer(document.createElement('div'));
+    const renderer = new PeriodicClassicalFieldRenderer(
+      document.createElement('div'),
+    );
     const base = makeQuantumSnapshot(129, 0.4, 0.6);
     const snapshot: Quantum1DFixedSnapshot = {
       ...base,
@@ -155,7 +199,11 @@ describe('combined Re/Im view rendering', () => {
 
     const info = renderer.renderScene(
       snapshot,
-      { showLattice: false, showSprings: false, quantity: 'real-imaginary-parts' },
+      {
+        showLattice: false,
+        showSprings: false,
+        quantity: 'real-imaginary-parts',
+      },
       WIDTH,
       HEIGHT,
     );
@@ -178,7 +226,11 @@ describe('combined Re/Im view rendering', () => {
     const realLod = realAggregator.aggregate(snapshot.amplitudeReal, 256);
     const imagLod = imagAggregator.aggregate(snapshot.amplitudeImaginary, 256);
 
-    expect(Math.max(...Array.from(realLod.max.slice(0, realLod.count)))).toBe(3);
-    expect(Math.min(...Array.from(imagLod.min.slice(0, imagLod.count)))).toBe(-4);
+    expect(Math.max(...Array.from(realLod.max.slice(0, realLod.count)))).toBe(
+      3,
+    );
+    expect(Math.min(...Array.from(imagLod.min.slice(0, imagLod.count)))).toBe(
+      -4,
+    );
   });
 });

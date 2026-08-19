@@ -1,6 +1,15 @@
 import { fastDst1Unitary2D } from '../core/fft';
 import { flattenIndex2D } from '../core/grids';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
+import {
+  assertIntegerInRange,
+  assertPositiveFinite,
+  assertResolvableQuantumTime,
+  assertUnitInterval,
+} from '../core/validation';
 import { computeDiscreteNorm } from './initialStates';
 import type { Quantum2DDisplaySnapshot } from './quantum2dDisplay';
 import {
@@ -35,7 +44,7 @@ export interface Quantum2DFixedSnapshot {
   readonly time: number;
   readonly systemLabel: '2D square';
   readonly boundaryCondition: 'dirichlet';
-  readonly modeLabel: 'free-field one-particle';
+  readonly modeLabel: 'square-root lattice quantum model';
   readonly quantity: Quantum2DFixedQuantity;
   readonly width: number;
   readonly height: number;
@@ -57,10 +66,11 @@ export interface Quantum2DFixedDiagnostics extends SimulationDiagnostics {
 
 const PHASE_SAMPLES_PER_FASTEST_PERIOD = 32;
 
-export class Quantum2DFixedEngine
-  implements
-    SimulationEngine<Quantum2DFixedConfig, Quantum2DFixedSnapshot, Quantum2DFixedDiagnostics>
-{
+export class Quantum2DFixedEngine implements SimulationEngine<
+  Quantum2DFixedConfig,
+  Quantum2DFixedSnapshot,
+  Quantum2DFixedDiagnostics
+> {
   private config: Quantum2DFixedConfig | null = null;
   private time = 0;
   private spacing = 1;
@@ -94,22 +104,21 @@ export class Quantum2DFixedEngine
     this.spacing = config.domainLength / (config.size - 1);
     this.interiorSize = config.size - 2;
     this.modeFrequencies = new Float64Array(
-      buildModeFrequencies2D(
-        this.interiorSize,
-        this.spacing,
-        config.waveSpeed,
-      ),
+      buildModeFrequencies2D(this.interiorSize, this.spacing, config.waveSpeed),
     );
 
-    const initialSiteState = createFixedQuantumInitialState2D(config.initialPreset, {
-      size: config.size,
-      centerX: config.initialCenterX,
-      centerY: config.initialCenterY,
-      gaussianWidth: config.gaussianWidth,
-      momentumWidth: config.momentumWidth,
-      modeNumberX: config.modeNumberX,
-      modeNumberY: config.modeNumberY,
-    });
+    const initialSiteState = createFixedQuantumInitialState2D(
+      config.initialPreset,
+      {
+        size: config.size,
+        centerX: config.initialCenterX,
+        centerY: config.initialCenterY,
+        gaussianWidth: config.gaussianWidth,
+        momentumWidth: config.momentumWidth,
+        modeNumberX: config.modeNumberX,
+        modeNumberY: config.modeNumberY,
+      },
+    );
 
     this.siteReal = new Float64Array(initialSiteState.real);
     this.siteImaginary = new Float64Array(initialSiteState.imaginary);
@@ -117,7 +126,9 @@ export class Quantum2DFixedEngine
     this.probabilityDensity = new Float64Array(initialSiteState.real.length);
     this.modeWeights = new Float64Array(this.interiorSize * this.interiorSize);
     this.interiorReal = new Float64Array(this.interiorSize * this.interiorSize);
-    this.interiorImaginary = new Float64Array(this.interiorSize * this.interiorSize);
+    this.interiorImaginary = new Float64Array(
+      this.interiorSize * this.interiorSize,
+    );
 
     extractInteriorState(
       config.size,
@@ -127,7 +138,9 @@ export class Quantum2DFixedEngine
       this.interiorImaginary,
     );
     this.modeReal = new Float64Array(this.interiorSize * this.interiorSize);
-    this.modeImaginary = new Float64Array(this.interiorSize * this.interiorSize);
+    this.modeImaginary = new Float64Array(
+      this.interiorSize * this.interiorSize,
+    );
     fastDst1Unitary2D(
       this.interiorReal,
       this.interiorImaginary,
@@ -144,6 +157,10 @@ export class Quantum2DFixedEngine
   }
 
   public step(dt: number): void {
+    if (!Number.isFinite(dt)) {
+      throw new Error(`dt must be a finite number, received ${String(dt)}.`);
+    }
+
     if (dt <= 0) {
       return;
     }
@@ -152,6 +169,11 @@ export class Quantum2DFixedEngine
   }
 
   public setTime(time: number): void {
+    if (this.config === null) {
+      throw new Error('Engine has not been initialised.');
+    }
+
+    assertResolvableQuantumTime(time, this.maximumFrequency);
     this.time = Math.max(0, time);
 
     for (let index = 0; index < this.modeReal.length; index += 1) {
@@ -209,7 +231,7 @@ export class Quantum2DFixedEngine
       time: this.time,
       systemLabel: '2D square',
       boundaryCondition: 'dirichlet',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity,
       width: this.config.size,
       height: this.config.size,
@@ -229,7 +251,8 @@ export class Quantum2DFixedEngine
     const totalNorm = computeDiscreteNorm(this.modeReal, this.modeImaginary);
     const recommendedDt =
       this.maximumFrequency > 0
-        ? (2 * Math.PI) / (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
+        ? (2 * Math.PI) /
+          (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
         : 0.05;
 
     return {
@@ -262,8 +285,14 @@ export class Quantum2DFixedEngine
           ? auxTarget
           : new Float32Array(this.siteReal.length);
       for (let index = 0; index < this.siteReal.length; index += 1) {
-        displayValues[index] = Math.atan2(this.siteImaginary[index], this.siteReal[index]);
-        displayValuesAux[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+        displayValues[index] = Math.atan2(
+          this.siteImaginary[index],
+          this.siteReal[index],
+        );
+        displayValuesAux[index] = Math.hypot(
+          this.siteReal[index],
+          this.siteImaginary[index],
+        );
       }
     } else {
       for (let index = 0; index < this.siteReal.length; index += 1) {
@@ -275,7 +304,10 @@ export class Quantum2DFixedEngine
             displayValues[index] = this.siteImaginary[index];
             break;
           case 'magnitude':
-            displayValues[index] = Math.hypot(this.siteReal[index], this.siteImaginary[index]);
+            displayValues[index] = Math.hypot(
+              this.siteReal[index],
+              this.siteImaginary[index],
+            );
             break;
           case 'probability-density':
           default:
@@ -293,7 +325,7 @@ export class Quantum2DFixedEngine
       time: this.time,
       systemLabel: '2D square',
       boundaryCondition: 'dirichlet',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity,
       width: this.config.size,
       height: this.config.size,
@@ -319,7 +351,7 @@ function buildModeFrequencies2D(
     for (let mx = 0; mx < interiorSize; mx += 1) {
       const sinX = Math.sin((Math.PI * (mx + 1)) / (2 * (interiorSize + 1)));
       frequencies[flattenIndex2D(mx, my, interiorSize)] =
-        (2 * waveSpeed * Math.sqrt((sinX * sinX) + (sinY * sinY))) / spacing;
+        (2 * waveSpeed * Math.sqrt(sinX * sinX + sinY * sinY)) / spacing;
     }
   }
 
@@ -330,11 +362,26 @@ function assertValidConfig(config: Quantum2DFixedConfig): void {
     throw new Error('size must be an integer greater than or equal to 5.');
   }
 
-  if (config.domainLength <= 0 || config.waveSpeed <= 0) {
-    throw new Error('domainLength and waveSpeed must be positive.');
-  }
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertPositiveFinite(config.momentumWidth, 'momentumWidth');
+  assertUnitInterval(config.initialCenterX, 'initialCenterX');
+  assertUnitInterval(config.initialCenterY, 'initialCenterY');
 
-  if (config.gaussianWidth <= 0 || config.momentumWidth <= 0) {
-    throw new Error('gaussianWidth and momentumWidth must be positive.');
-  }
+  // Carrier zero is valid for a Gaussian; a selected normal mode requires
+  // 1 .. size - 2 in both directions (checked again at construction).
+  const minimumMode = config.initialPreset === 'selected-normal-mode' ? 1 : 0;
+  assertIntegerInRange(
+    config.modeNumberX,
+    'modeNumberX',
+    minimumMode,
+    config.size - 2,
+  );
+  assertIntegerInRange(
+    config.modeNumberY,
+    'modeNumberY',
+    minimumMode,
+    config.size - 2,
+  );
 }

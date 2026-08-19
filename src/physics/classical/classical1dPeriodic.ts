@@ -3,11 +3,26 @@ import {
   type ClassicalPeriodicEnergyBreakdown1D,
 } from '../core/invariants';
 import { applyPeriodicLaplacian1D } from '../core/operators';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
 import {
+  assertFiniteNumber,
+  assertModeNumberList,
+  assertPositiveFinite,
+  assertUnitInterval,
+  computeRelativeEnergyDrift,
+  computeSubstepCount,
+} from '../core/validation';
+import {
+  CLASSICAL_1D_PERIODIC_PRESETS,
   createGaussianBump1D,
-  createStandingMode1D,
-  type Classical1DInitialPreset,
+  createStandingModes1D,
+  createTravellingGaussianRight1D,
+  mapPeriodicSiteIndex,
+  subtractDiscreteMean,
+  type Classical1DPeriodicInitialPreset,
 } from './initialConditions';
 
 export interface Classical1DPeriodicConfig {
@@ -17,10 +32,15 @@ export interface Classical1DPeriodicConfig {
   readonly amplitude: number;
   readonly initialCenter: number;
   readonly gaussianWidth: number;
-  readonly initialPreset: Classical1DInitialPreset;
+  /** Standing-mode numbers used by the 'standing-modes' preset. */
+  readonly modeNumbers: readonly number[];
+  readonly initialPreset: Classical1DPeriodicInitialPreset;
 }
 
-export type Classical1DPeriodicQuantity = 'displacement' | 'velocity' | 'energy-density';
+export type Classical1DPeriodicQuantity =
+  | 'displacement'
+  | 'velocity'
+  | 'energy-density';
 
 export interface Classical1DPeriodicSnapshot {
   readonly kind: 'classical-1d-periodic';
@@ -47,14 +67,11 @@ export interface Classical1DPeriodicDiagnostics extends SimulationDiagnostics {
 
 const STABILITY_SAFETY_FACTOR = 0.7;
 
-export class Classical1DPeriodicEngine
-  implements
-    SimulationEngine<
-      Classical1DPeriodicConfig,
-      Classical1DPeriodicSnapshot,
-      Classical1DPeriodicDiagnostics
-    >
-{
+export class Classical1DPeriodicEngine implements SimulationEngine<
+  Classical1DPeriodicConfig,
+  Classical1DPeriodicSnapshot,
+  Classical1DPeriodicDiagnostics
+> {
   private config: Classical1DPeriodicConfig | null = null;
 
   private time = 0;
@@ -98,12 +115,12 @@ export class Classical1DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    if (dt <= 0) {
+    const substeps = computeSubstepCount(dt, this.getMaxStableDt() * 0.95);
+
+    if (substeps === 0) {
       return;
     }
 
-    const maxStableDt = this.getMaxStableDt();
-    const substeps = Math.max(1, Math.ceil(dt / (maxStableDt * 0.95)));
     const substepDt = dt / substeps;
 
     for (let stepIndex = 0; stepIndex < substeps; stepIndex += 1) {
@@ -150,7 +167,10 @@ export class Classical1DPeriodicEngine
       recommendedDt,
       stabilityRatio: recommendedDt / maxStableDt,
       totalEnergy,
-      relativeEnergyDrift: Math.abs(totalEnergy - this.energyBaseline) / this.energyBaseline,
+      relativeEnergyDrift: computeRelativeEnergyDrift(
+        this.energyBaseline,
+        totalEnergy,
+      ),
     };
   }
 
@@ -178,7 +198,11 @@ export class Classical1DPeriodicEngine
       throw new Error('Engine has not been initialised.');
     }
 
-    applyPeriodicLaplacian1D(this.displacement, this.inverseSpacingSquared, this.acceleration);
+    applyPeriodicLaplacian1D(
+      this.displacement,
+      this.inverseSpacingSquared,
+      this.acceleration,
+    );
 
     const accelerationScale = this.config.waveSpeed * this.config.waveSpeed;
 
@@ -215,35 +239,53 @@ function createInitialState(config: Classical1DPeriodicConfig): {
 } {
   const displacement = new Float64Array(config.siteCount);
   const velocity = new Float64Array(config.siteCount);
+  const bumpOptions = {
+    amplitude: config.amplitude,
+    center: config.initialCenter,
+    width: config.gaussianWidth,
+  };
 
   switch (config.initialPreset) {
     case 'gaussian-displacement':
-      displacement.set(
-        createGaussianBump1D(config.siteCount, {
-          amplitude: config.amplitude,
-          center: config.initialCenter,
-          width: config.gaussianWidth,
-        }),
-      );
+      displacement.set(createGaussianBump1D(config.siteCount, bumpOptions));
       break;
     case 'gaussian-velocity':
+      // Legacy strictly-positive bump: its positive mean excites the periodic
+      // zero mode, so the mean displacement grows linearly in time.
+      velocity.set(createGaussianBump1D(config.siteCount, bumpOptions));
+      break;
+    case 'zero-mean-gaussian-velocity':
       velocity.set(
-        createGaussianBump1D(config.siteCount, {
-          amplitude: config.amplitude,
-          center: config.initialCenter,
-          width: config.gaussianWidth,
-        }),
+        subtractDiscreteMean(
+          createGaussianBump1D(config.siteCount, bumpOptions),
+        ),
       );
       break;
+    case 'travelling-gaussian-right': {
+      const spacing = config.domainLength / config.siteCount;
+      const packet = createTravellingGaussianRight1D(
+        config.siteCount,
+        bumpOptions,
+        spacing,
+        config.waveSpeed,
+      );
+      displacement.set(packet.displacement);
+      velocity.set(packet.velocity);
+      break;
+    }
     case 'single-site-displacement':
-      displacement[Math.round(config.initialCenter * (config.siteCount - 1)) % config.siteCount] =
-        config.amplitude;
+      displacement[
+        mapPeriodicSiteIndex(config.initialCenter, config.siteCount)
+      ] = config.amplitude;
       break;
-    case 'standing-mode-1':
-      displacement.set(createStandingMode1D(config.siteCount, 1, config.amplitude));
-      break;
-    case 'standing-mode-2':
-      displacement.set(createStandingMode1D(config.siteCount, 2, config.amplitude));
+    case 'standing-modes':
+      displacement.set(
+        createStandingModes1D(
+          config.siteCount,
+          config.modeNumbers,
+          config.amplitude,
+        ),
+      );
       break;
   }
 
@@ -255,11 +297,25 @@ function assertValidConfig(config: Classical1DPeriodicConfig): void {
     throw new Error('siteCount must be an integer greater than or equal to 8.');
   }
 
-  if (config.domainLength <= 0 || config.waveSpeed <= 0) {
-    throw new Error('domainLength and waveSpeed must be positive.');
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertFiniteNumber(config.amplitude, 'amplitude');
+  assertUnitInterval(config.initialCenter, 'initialCenter');
+
+  if (config.initialPreset === 'standing-modes') {
+    // Distinct periodic cosine modes: 1 .. floor(N/2).
+    assertModeNumberList(
+      config.modeNumbers,
+      'modeNumbers',
+      1,
+      Math.floor(config.siteCount / 2),
+    );
   }
 
-  if (config.gaussianWidth <= 0) {
-    throw new Error('gaussianWidth must be positive.');
+  if (!CLASSICAL_1D_PERIODIC_PRESETS.includes(config.initialPreset)) {
+    throw new Error(
+      `initialPreset '${String(config.initialPreset)}' is not valid for the periodic 1D lattice.`,
+    );
   }
 }

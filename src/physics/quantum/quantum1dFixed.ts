@@ -1,5 +1,15 @@
 import { fastDst1Unitary } from '../core/fft';
-import type { SimulationDiagnostics, SimulationEngine } from '../core/simulation';
+import type {
+  SimulationDiagnostics,
+  SimulationEngine,
+} from '../core/simulation';
+import {
+  assertIntegerInRange,
+  assertModeNumberList,
+  assertPositiveFinite,
+  assertResolvableQuantumTime,
+  assertUnitInterval,
+} from '../core/validation';
 import {
   computeDiscreteNorm,
   type Quantum1DInitialPreset,
@@ -13,6 +23,8 @@ export interface Quantum1DFixedConfig {
   readonly gaussianWidth: number;
   readonly momentumWidth: number;
   readonly modeNumber: number;
+  /** Normal modes summed by the 'selected-normal-mode' preset. */
+  readonly modeNumbers: readonly number[];
   readonly initialPreset: Quantum1DInitialPreset;
 }
 
@@ -29,7 +41,7 @@ export interface Quantum1DFixedSnapshot {
   readonly time: number;
   readonly systemLabel: '1D interval';
   readonly boundaryCondition: 'dirichlet';
-  readonly modeLabel: 'free-field one-particle';
+  readonly modeLabel: 'square-root lattice quantum model';
   readonly quantity: Quantum1DFixedQuantity;
   readonly siteCount: number;
   readonly domainLength: number;
@@ -57,17 +69,18 @@ interface SnapshotBuffers {
 }
 
 /**
- * Exact modal evolution of the fixed-end (Dirichlet) free-field one-particle
+ * Exact modal evolution of the fixed-end (Dirichlet) square-root lattice quantum
  * state. The Dirichlet normal modes are the orthonormal DST-I basis
  * sqrt(2/(N+1)) sin(pi m (j+1) / (N+1)) over the N interior sites; the two
  * boundary sites are pinned to zero. As with the periodic engine, the initial
  * modal coefficients are immutable and `setTime(t)` performs one phase
  * rotation and one inverse transform (fast DST-I) regardless of target time.
  */
-export class Quantum1DFixedEngine
-  implements
-    SimulationEngine<Quantum1DFixedConfig, Quantum1DFixedSnapshot, Quantum1DFixedDiagnostics>
-{
+export class Quantum1DFixedEngine implements SimulationEngine<
+  Quantum1DFixedConfig,
+  Quantum1DFixedSnapshot,
+  Quantum1DFixedDiagnostics
+> {
   private config: Quantum1DFixedConfig | null = null;
   private time = 0;
   private spacing = 1;
@@ -110,7 +123,10 @@ export class Quantum1DFixedEngine
       0,
     );
 
-    const initialState = createDirichletInitialState(config, this.interiorCount);
+    const initialState = createDirichletInitialState(
+      config,
+      this.interiorCount,
+    );
     this.initialModeReal = initialState.modeReal;
     this.initialModeImaginary = initialState.modeImaginary;
     this.modeReal = new Float64Array(this.initialModeReal);
@@ -138,6 +154,10 @@ export class Quantum1DFixedEngine
 
   /** Advances relative to the current time. Equivalent to setTime(time + dt). */
   public step(dt: number): void {
+    if (!Number.isFinite(dt)) {
+      throw new Error(`dt must be a finite number, received ${String(dt)}.`);
+    }
+
     if (dt <= 0) {
       return;
     }
@@ -154,6 +174,7 @@ export class Quantum1DFixedEngine
       throw new Error('Engine has not been initialised.');
     }
 
+    assertResolvableQuantumTime(time, this.maximumFrequency);
     this.time = Math.max(0, time);
 
     for (let modeIndex = 0; modeIndex < this.modeReal.length; modeIndex += 1) {
@@ -170,7 +191,12 @@ export class Quantum1DFixedEngine
   }
 
   private applyModesToSites(): void {
-    fastDst1Unitary(this.modeReal, this.modeImaginary, this.interiorReal, this.interiorImaginary);
+    fastDst1Unitary(
+      this.modeReal,
+      this.modeImaginary,
+      this.interiorReal,
+      this.interiorImaginary,
+    );
     this.inverseTransformCount += 1;
 
     // Embed the interior into the full lattice with pinned zero endpoints.
@@ -209,7 +235,7 @@ export class Quantum1DFixedEngine
       time: this.time,
       systemLabel: '1D interval',
       boundaryCondition: 'dirichlet',
-      modeLabel: 'free-field one-particle',
+      modeLabel: 'square-root lattice quantum model',
       quantity,
       siteCount: this.config.siteCount,
       domainLength: this.config.domainLength,
@@ -227,7 +253,8 @@ export class Quantum1DFixedEngine
     const totalNorm = computeDiscreteNorm(this.modeReal, this.modeImaginary);
     const recommendedDt =
       this.maximumFrequency > 0
-        ? (2 * Math.PI) / (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
+        ? (2 * Math.PI) /
+          (this.maximumFrequency * PHASE_SAMPLES_PER_FASTEST_PERIOD)
         : 0.05;
 
     return {
@@ -259,7 +286,10 @@ function createDirichletInitialState(
   switch (config.initialPreset) {
     case 'site-localized':
       return forwardSineTransform(
-        ...createSiteLocalizedInteriorState(interiorCount, config.initialCenter),
+        ...createSiteLocalizedInteriorState(
+          interiorCount,
+          config.initialCenter,
+        ),
       );
     case 'gaussian-wavepacket':
       return forwardSineTransform(
@@ -271,7 +301,7 @@ function createDirichletInitialState(
         ),
       );
     case 'selected-normal-mode':
-      return createSelectedDirichletMode(interiorCount, config.modeNumber);
+      return createSelectedDirichletModes(interiorCount, config.modeNumbers);
     case 'counterpropagating-superposition':
       return createModeSuperposition(interiorCount, config.modeNumber);
   }
@@ -293,7 +323,10 @@ function createSiteLocalizedInteriorState(
 ): [Float64Array, Float64Array] {
   const real = new Float64Array(interiorCount);
   const imaginary = new Float64Array(interiorCount);
-  const centerIndex = Math.max(0, Math.min(interiorCount - 1, Math.round(center * (interiorCount + 1)) - 1));
+  const centerIndex = Math.max(
+    0,
+    Math.min(interiorCount - 1, Math.round(center * (interiorCount + 1)) - 1),
+  );
   real[centerIndex] = 1;
   return normalizeInteriorState(real, imaginary);
 }
@@ -325,6 +358,12 @@ function normalizeInteriorState(
 ): [Float64Array, Float64Array] {
   const norm = Math.sqrt(computeDiscreteNorm(real, imaginary));
 
+  if (norm === 0 || !Number.isFinite(norm)) {
+    // e.g. an extremely narrow Gaussian centred on a pinned boundary, where
+    // every interior sample underflows to zero: 0/0 must never create NaN.
+    throw new Error('Cannot normalize the zero state.');
+  }
+
   for (let index = 0; index < real.length; index += 1) {
     real[index] /= norm;
     imaginary[index] /= norm;
@@ -333,14 +372,24 @@ function normalizeInteriorState(
   return [real, imaginary];
 }
 
-function createSelectedDirichletMode(
+/**
+ * Equal-weight superposition of the selected Dirichlet sine modes,
+ * psi = (1/sqrt(k)) sum_n phi_n: the DST-I basis is orthonormal, so the norm
+ * is exactly one for any selection of distinct modes.
+ */
+function createSelectedDirichletModes(
   interiorCount: number,
-  modeNumber: number,
+  modeNumbers: readonly number[],
 ): { modeReal: Float64Array; modeImaginary: Float64Array } {
+  assertModeNumberList(modeNumbers, 'modeNumbers', 1, interiorCount);
   const modeReal = new Float64Array(interiorCount);
   const modeImaginary = new Float64Array(interiorCount);
-  const selectedIndex = Math.max(0, Math.min(interiorCount - 1, modeNumber - 1));
-  modeReal[selectedIndex] = 1;
+  const weight = 1 / Math.sqrt(modeNumbers.length);
+
+  for (const modeNumber of modeNumbers) {
+    modeReal[modeNumber - 1] = weight;
+  }
+
   return { modeReal, modeImaginary };
 }
 
@@ -348,10 +397,15 @@ function createModeSuperposition(
   interiorCount: number,
   modeNumber: number,
 ): { modeReal: Float64Array; modeImaginary: Float64Array } {
+  assertIntegerInRange(modeNumber, 'modeNumber', 1, interiorCount);
   const modeReal = new Float64Array(interiorCount);
   const modeImaginary = new Float64Array(interiorCount);
-  const firstIndex = Math.max(0, Math.min(interiorCount - 1, modeNumber - 1));
-  const secondIndex = Math.max(0, Math.min(interiorCount - 1, modeNumber));
+  // Always pair two DISTINCT modes: at the highest mode, pair with the
+  // previous one instead of clamping both indices to the same element (which
+  // would silently halve the norm).
+  const firstIndex =
+    modeNumber === interiorCount ? interiorCount - 2 : modeNumber - 1;
+  const secondIndex = firstIndex + 1;
   const scale = 1 / Math.sqrt(2);
   modeReal[firstIndex] = scale;
   modeReal[secondIndex] = scale;
@@ -368,7 +422,10 @@ function buildDirichletModeFrequencies(
   for (let modeIndex = 0; modeIndex < interiorCount; modeIndex += 1) {
     const modeNumber = modeIndex + 1;
     frequencies[modeIndex] =
-      (2 * waveSpeed * Math.sin((Math.PI * modeNumber) / (2 * (interiorCount + 1)))) / spacing;
+      (2 *
+        waveSpeed *
+        Math.sin((Math.PI * modeNumber) / (2 * (interiorCount + 1)))) /
+      spacing;
   }
 
   return frequencies;
@@ -379,12 +436,34 @@ function assertValidConfig(config: Quantum1DFixedConfig): void {
     throw new Error('siteCount must be an integer greater than or equal to 4.');
   }
 
-  if (
-    config.domainLength <= 0 ||
-    config.waveSpeed <= 0 ||
-    config.gaussianWidth <= 0 ||
-    config.momentumWidth <= 0
-  ) {
-    throw new Error('All physical scales must be positive.');
+  assertPositiveFinite(config.domainLength, 'domainLength');
+  assertPositiveFinite(config.waveSpeed, 'waveSpeed');
+  assertPositiveFinite(config.gaussianWidth, 'gaussianWidth');
+  assertPositiveFinite(config.momentumWidth, 'momentumWidth');
+  assertUnitInterval(config.initialCenter, 'initialCenter');
+
+  // Carrier zero is valid for a Gaussian; sine modes require 1..siteCount-2.
+  // Fractional or non-finite modes are always rejected.
+  if (config.initialPreset === 'selected-normal-mode') {
+    assertModeNumberList(
+      config.modeNumbers,
+      'modeNumbers',
+      1,
+      config.siteCount - 2,
+    );
+  } else if (config.initialPreset === 'counterpropagating-superposition') {
+    assertIntegerInRange(
+      config.modeNumber,
+      'modeNumber',
+      1,
+      config.siteCount - 2,
+    );
+  } else {
+    assertIntegerInRange(
+      config.modeNumber,
+      'modeNumber',
+      0,
+      config.siteCount - 2,
+    );
   }
 }

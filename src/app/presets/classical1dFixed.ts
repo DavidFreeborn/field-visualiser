@@ -7,5 +7,6 @@ export const defaultClassical1DFixedConfig: Classical1DFixedConfig = {
   amplitude: 0.9,
   initialCenter: 0.5,
   gaussianWidth: 0.06,
+  modeNumbers: [1],
   initialPreset: 'gaussian-displacement',
 };
